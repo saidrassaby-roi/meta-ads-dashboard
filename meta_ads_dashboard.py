@@ -1,6 +1,6 @@
 """
-Meta Ads Creative Intelligence Dashboard V2
-===========================================
+Meta Ads Creative Intelligence Dashboard V2.1
+=============================================
 Application de pilotage des créatives publicitaires Meta Ads.
 Avec support des données quotidiennes pour tendances et sparklines.
 
@@ -11,7 +11,7 @@ Lancement:
     streamlit run meta_ads_dashboard.py
 
 Auteur: BNB Solutions Digitales
-Version: 2.0
+Version: 2.1
 """
 
 import streamlit as st
@@ -22,6 +22,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from io import StringIO
 import json
+import re
 
 # Configuration de la page
 st.set_page_config(
@@ -86,24 +87,42 @@ st.markdown("""
 # FONCTIONS DE TRAITEMENT
 # ============================================================================
 
-def detect_columns(df):
-    """Détecte et mappe les colonnes du CSV Meta Ads."""
+def find_column(df, possible_names):
+    """Trouve une colonne parmi plusieurs noms possibles."""
+    for name in possible_names:
+        # Recherche exacte
+        if name in df.columns:
+            return name
+        # Recherche insensible à la casse
+        for col in df.columns:
+            if col.lower() == name.lower():
+                return col
+            # Recherche partielle
+            if name.lower() in col.lower():
+                return col
+    return None
+
+
+def standardize_columns(df):
+    """Standardise les noms de colonnes du CSV Meta Ads."""
     
-    # Mapping des colonnes possibles vers noms standardisés
+    # Mapping des colonnes : nom standard -> liste de noms possibles
     column_mappings = {
-        'nom': ['Nom de la publicité', 'Ad name', 'nom_publicite', 'nom'],
+        'nom': ['Nom de la publicité', 'Ad name', 'nom_publicite', 'nom', 'Nom de la pub'],
         'impressions': ['Impressions', 'impressions'],
         'reach': ['Couverture', 'Reach', 'reach', 'couverture'],
         'clics_lien': ['Clics sur un lien', 'Link clicks', 'clics_lien', 'Clics sur le lien'],
         'clics_tous': ['Clics (tous)', 'Clicks (all)', 'clics_tous'],
-        'ctr_lien': ['CTR (taux de clics sur le lien)', 'CTR unique (taux de clics sur le lien)', 
+        'ctr_lien': ['CTR unique (taux de clics sur le lien)', 'CTR (taux de clics sur le lien)', 
                      'Link click-through rate', 'ctr_lien', 'CTR (lien)', 'ctr_unique_lien'],
-        'cpc_lien': ['CPC (coût par clic sur un lien) (EUR)', 'Cost per link click', 'cpc_lien',
-                     'CPC (coût par clic sur un lien)'],
-        'cpm': ['CPM (Coût pour 1 000 impressions) (EUR)', 'CPM (cost per 1,000 impressions)', 
-                'cpm', 'CPM'],
-        'depense': ['Montant dépensé (EUR)', 'Amount spent', 'depense', 'montant_depense',
-                    'Montant dépensé'],
+        'ctr_tous': ['CTR (tous)', 'CTR (all)', 'ctr_tous'],
+        'cpc_lien': ['CPC (coût par clic sur un lien) (EUR)', 'CPC (coût par clic sur un lien)',
+                     'Cost per link click', 'cpc_lien'],
+        'cpc_tous': ['CPC (Tous) (EUR)', 'CPC (tous)', 'CPC (All)', 'cpc_tous'],
+        'cpm': ['CPM (Coût pour 1 000 impressions) (EUR)', 'CPM (Coût pour 1 000 impressions)',
+                'CPM (cost per 1,000 impressions)', 'cpm', 'CPM'],
+        'depense': ['Montant dépensé (EUR)', 'Montant dépensé', 'Amount spent', 'depense', 
+                    'montant_depense'],
         'achats': ['Achats', 'Purchases', 'achats'],
         'valeur_achats': ['Valeur de conversion des achats', 'Purchase conversion value', 
                          'valeur_achats', 'valeur_conversion'],
@@ -116,15 +135,35 @@ def detect_columns(df):
         'date_fin': ['Fin des rapports', 'Reporting ends', 'date_fin'],
     }
     
-    # Créer le mapping inverse
+    # Créer le mapping de renommage
     rename_dict = {}
     for standard_name, possible_names in column_mappings.items():
-        for col_name in possible_names:
-            if col_name in df.columns:
-                rename_dict[col_name] = standard_name
-                break
+        found_col = find_column(df, possible_names)
+        if found_col and found_col != standard_name:
+            rename_dict[found_col] = standard_name
     
-    return rename_dict
+    # Renommer les colonnes
+    df = df.rename(columns=rename_dict)
+    
+    return df
+
+
+def clean_numeric(value):
+    """Nettoie une valeur numérique."""
+    if pd.isna(value):
+        return 0
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        # Supprimer espaces et remplacer virgules
+        value = value.strip().replace(' ', '').replace(',', '.')
+        # Supprimer les caractères non numériques sauf . et -
+        value = re.sub(r'[^\d.\-]', '', value)
+        try:
+            return float(value) if value else 0
+        except:
+            return 0
+    return 0
 
 
 @st.cache_data
@@ -134,21 +173,17 @@ def load_and_process_data(uploaded_file):
     # Lire le CSV
     df = pd.read_csv(uploaded_file)
     
-    # Détecter et renommer les colonnes
-    rename_dict = detect_columns(df)
-    df = df.rename(columns=rename_dict)
+    # Standardiser les colonnes
+    df = standardize_columns(df)
     
-    # Convertir les colonnes numériques
-    numeric_cols = ['impressions', 'reach', 'clics_lien', 'clics_tous', 'ctr_lien', 
-                    'cpc_lien', 'cpm', 'depense', 'achats', 'valeur_achats', 'roas', 
+    # Liste des colonnes numériques à nettoyer
+    numeric_cols = ['impressions', 'reach', 'clics_lien', 'clics_tous', 'ctr_lien', 'ctr_tous',
+                    'cpc_lien', 'cpc_tous', 'cpm', 'depense', 'achats', 'valeur_achats', 'roas', 
                     'cpa', 'frequency', 'ajouts_panier']
     
     for col in numeric_cols:
         if col in df.columns:
-            # Gérer les formats avec virgules comme séparateur décimal
-            if df[col].dtype == object:
-                df[col] = df[col].str.replace(',', '.').str.replace(' ', '')
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            df[col] = df[col].apply(clean_numeric)
     
     # Ajouter colonnes manquantes avec valeurs par défaut
     default_cols = {
@@ -156,15 +191,37 @@ def load_and_process_data(uploaded_file):
         'achats': 0,
         'roas': 0,
         'ajouts_panier': 0,
-        'cpa': 0
+        'cpa': 0,
+        'cpm': 0,
+        'cpc_lien': 0,
+        'ctr_lien': 0,
+        'clics_lien': 0,
+        'frequency': 1
     }
+    
     for col, default in default_cols.items():
         if col not in df.columns:
             df[col] = default
     
-    # Calculer frequency si manquant
-    if 'frequency' not in df.columns or df['frequency'].sum() == 0:
+    # Si clics_lien manquant mais clics_tous présent
+    if df['clics_lien'].sum() == 0 and 'clics_tous' in df.columns:
+        df['clics_lien'] = df['clics_tous']
+    
+    # Si ctr_lien manquant mais ctr_tous présent
+    if df['ctr_lien'].sum() == 0 and 'ctr_tous' in df.columns:
+        df['ctr_lien'] = df['ctr_tous']
+    
+    # Si cpc_lien manquant mais cpc_tous présent
+    if df['cpc_lien'].sum() == 0 and 'cpc_tous' in df.columns:
+        df['cpc_lien'] = df['cpc_tous']
+    
+    # Calculer frequency si manquant ou nul
+    if df['frequency'].sum() == 0:
         df['frequency'] = np.where(df['reach'] > 0, df['impressions'] / df['reach'], 1)
+    
+    # Filtrer les lignes sans nom
+    if 'nom' in df.columns:
+        df = df[df['nom'].notna() & (df['nom'] != '')]
     
     return df
 
@@ -175,19 +232,16 @@ def load_daily_data(uploaded_file):
     
     df = pd.read_csv(uploaded_file)
     
-    # Détecter et renommer les colonnes
-    rename_dict = detect_columns(df)
-    df = df.rename(columns=rename_dict)
+    # Standardiser les colonnes
+    df = standardize_columns(df)
     
-    # Convertir les colonnes numériques
+    # Nettoyer les colonnes numériques
     numeric_cols = ['impressions', 'reach', 'clics_lien', 'ctr_lien', 'cpc_lien', 
                     'cpm', 'depense', 'achats']
     
     for col in numeric_cols:
         if col in df.columns:
-            if df[col].dtype == object:
-                df[col] = df[col].str.replace(',', '.').str.replace(' ', '')
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            df[col] = df[col].apply(clean_numeric)
     
     # Convertir la date
     if 'date_debut' in df.columns:
@@ -226,10 +280,10 @@ def calculate_trends_from_daily(df_daily, lookback_days=14):
         
         for d in dates:
             row = df_14j[df_14j['date'].dt.date == d.date()]
-            if len(row) > 0 and row.iloc[0]['impressions'] > 0:
+            if len(row) > 0 and row.iloc[0].get('impressions', 0) > 0:
                 sparkline_data.append({
                     'date': d.strftime('%Y-%m-%d'),
-                    'impressions': float(row.iloc[0]['impressions']),
+                    'impressions': float(row.iloc[0].get('impressions', 0)),
                     'ctr': float(row.iloc[0].get('ctr_lien', 0)),
                     'depense': float(row.iloc[0].get('depense', 0)),
                     'cpm': float(row.iloc[0].get('cpm', 0))
@@ -276,11 +330,10 @@ def calculate_trends_from_daily(df_daily, lookback_days=14):
         trend_impr = calc_trend(impr_recent, impr_prec)
         
         # Score de tendance global (pondéré)
-        # CTR en hausse = bon, CPC en hausse = mauvais, CPM en hausse = mauvais
         trend_score = (
             0.40 * trend_ctr +
-            0.25 * (-trend_cpc) +  # Inversé
-            0.20 * (-trend_cpm) +  # Inversé
+            0.25 * (-trend_cpc) +
+            0.20 * (-trend_cpm) +
             0.15 * trend_impr
         )
         
@@ -300,7 +353,9 @@ def calculate_trends_from_daily(df_daily, lookback_days=14):
 
 def parse_creative_name(nom):
     """Extrait les composants du nom de la créative."""
-    import re
+    
+    if not isinstance(nom, str):
+        return {'usp': 'Autre', 'hook': 'Autre', 'format': 'IMG'}
     
     usp = 'Autre'
     hook = 'Autre'
@@ -330,7 +385,7 @@ def parse_creative_name(nom):
         hook = 'Problème/Solution'
     elif 'probleme/frustation' in nom_lower or 'problème/frustration' in nom_lower:
         hook = 'Problème/Frustration'
-    elif ' pv ' in nom_lower or nom_lower.startswith('pv ') or ' - pv -' in nom_lower:
+    elif ' pv ' in nom_lower or nom_lower.startswith('pv ') or ' - pv -' in nom_lower or '--pv--' in nom_lower:
         hook = 'Proposition de Valeur'
     elif 'produit neutre' in nom_lower:
         hook = 'Produit neutre'
@@ -417,7 +472,7 @@ def calculate_scale_potential(row, score_global_ajuste, coef_conf, trend_score=0
         0.25 * perf_score +
         0.25 * trend_component +
         0.20 * freq_score +
-        0.15 * (100 - abs(row.get('trend_cpm', 0))) +  # CPM stable = bon
+        0.15 * (100 - min(abs(row.get('trend_cpm', 0)), 100)) +
         0.15 * conf_score
     )
     
@@ -462,9 +517,9 @@ def calculate_scores(df, trends=None):
     
     # Calculer CPA pour ceux qui ont des achats
     df['cpa_calc'] = np.where(df['achats'] > 0, df['depense'] / df['achats'], 0)
-    cpa_mean, cpa_std = calc_stats(df[df['cpa_calc'] > 0]['cpa_calc'])
-    if cpa_mean == 0:
-        cpa_mean = df['depense'].mean()
+    valid_cpa = df[df['cpa_calc'] > 0]['cpa_calc']
+    cpa_mean = valid_cpa.mean() if len(valid_cpa) > 0 else df['depense'].mean()
+    cpa_std = valid_cpa.std() if len(valid_cpa) > 0 and valid_cpa.std() > 0 else 1
     
     # Calcul des Z-scores et scores
     scores_data = []
@@ -591,15 +646,18 @@ def generate_recommendation(row, trends=None):
 def create_sparkline_chart(sparkline_data, metric='ctr', height=60):
     """Crée un graphique sparkline avec Plotly."""
     if not sparkline_data:
-        return None
+        return None, 0
     
     values = [d.get(metric, 0) for d in sparkline_data]
-    dates = [d.get('date', '') for d in sparkline_data]
     
     # Calculer la tendance pour la couleur
-    recent_avg = np.mean(values[-4:]) if len(values) >= 4 else np.mean(values)
-    old_avg = np.mean(values[:4]) if len(values) >= 4 else np.mean(values)
-    trend = ((recent_avg - old_avg) / old_avg * 100) if old_avg > 0 else 0
+    non_zero = [v for v in values if v > 0]
+    if len(non_zero) >= 2:
+        recent_avg = np.mean(values[-4:]) if len(values) >= 4 else np.mean(values)
+        old_avg = np.mean(values[:4]) if len(values) >= 4 else np.mean(values)
+        trend = ((recent_avg - old_avg) / old_avg * 100) if old_avg > 0 else 0
+    else:
+        trend = 0
     
     color = '#10B981' if trend > 10 else '#EF4444' if trend < -10 else '#6B7280'
     
@@ -806,12 +864,14 @@ def main():
         df = calculate_scores(df, trends)
         
         if len(df) == 0:
-            st.warning("⚠️ Impossible de calculer les scores. Vérifiez le format du fichier.")
+            st.warning("⚠️ Aucune créative avec suffisamment d'impressions.")
             return
             
     except Exception as e:
         st.error(f"❌ Erreur lors du chargement: {str(e)}")
         st.info("Vérifiez que votre fichier est bien un export CSV de Meta Ads Manager.")
+        import traceback
+        st.code(traceback.format_exc())
         return
     
     # Indicateur de données quotidiennes
@@ -876,12 +936,6 @@ def main():
                             <br><small>ROAS: {row['roas']:.1f} | CTR: {row['ctr_lien']:.2f}% | Potentiel: {row['scale_potential']}</small>
                         </div>
                         """, unsafe_allow_html=True)
-                        
-                        # Sparkline si disponible
-                        if has_daily and row['nom'] in sparklines:
-                            fig, trend = create_sparkline_chart(sparklines[row['nom']], metric='ctr', height=40)
-                            if fig:
-                                st.plotly_chart(fig, use_container_width=True, key=f"spark_scale_{row['nom'][:20]}")
             else:
                 st.info("Aucune créative prête à scaler")
             
@@ -968,16 +1022,17 @@ def main():
             st.dataframe(usp_stats, use_container_width=True)
             
             # Graphique
-            fig = px.bar(
-                usp_stats.reset_index(),
-                x='usp',
-                y='Potentiel',
-                color='Potentiel',
-                color_continuous_scale='Greens',
-                title="Potentiel moyen par USP"
-            )
-            fig.update_layout(showlegend=False)
-            st.plotly_chart(fig, use_container_width=True)
+            if len(usp_stats) > 0:
+                fig = px.bar(
+                    usp_stats.reset_index(),
+                    x='usp',
+                    y='Potentiel',
+                    color='Potentiel',
+                    color_continuous_scale='Greens',
+                    title="Potentiel moyen par USP"
+                )
+                fig.update_layout(showlegend=False)
+                st.plotly_chart(fig, use_container_width=True)
         
         with col2:
             st.subheader("🎣 Performance par Hook")
@@ -996,35 +1051,38 @@ def main():
             st.dataframe(hook_stats, use_container_width=True)
             
             # Graphique
-            fig = px.bar(
-                hook_stats.reset_index(),
-                x='hook',
-                y='CTR moy %',
-                color='ROAS moy',
-                color_continuous_scale='Blues',
-                title="CTR moyen par Hook"
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            if len(hook_stats) > 0:
+                fig = px.bar(
+                    hook_stats.reset_index(),
+                    x='hook',
+                    y='CTR moy %',
+                    color='ROAS moy',
+                    color_continuous_scale='Blues',
+                    title="CTR moyen par Hook"
+                )
+                st.plotly_chart(fig, use_container_width=True)
         
         # Matrice USP x Hook
-        st.divider()
-        st.subheader("🎯 Matrice USP × Hook")
-        
-        matrix = df.pivot_table(
-            values='scale_potential',
-            index='usp',
-            columns='hook',
-            aggfunc='mean'
-        ).round(0)
-        
-        fig = px.imshow(
-            matrix,
-            labels=dict(x="Hook", y="USP", color="Potentiel"),
-            color_continuous_scale='RdYlGn',
-            aspect='auto'
-        )
-        fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
+        if len(df['usp'].unique()) > 1 and len(df['hook'].unique()) > 1:
+            st.divider()
+            st.subheader("🎯 Matrice USP × Hook")
+            
+            matrix = df.pivot_table(
+                values='scale_potential',
+                index='usp',
+                columns='hook',
+                aggfunc='mean'
+            ).round(0)
+            
+            if len(matrix) > 0:
+                fig = px.imshow(
+                    matrix,
+                    labels=dict(x="Hook", y="USP", color="Potentiel"),
+                    color_continuous_scale='RdYlGn',
+                    aspect='auto'
+                )
+                fig.update_layout(height=400)
+                st.plotly_chart(fig, use_container_width=True)
         
         # Insights
         st.divider()
@@ -1083,40 +1141,34 @@ def main():
         
         st.caption(f"{len(filtered_df)} créatives affichées")
         
-        # Afficher avec sparklines si disponibles
-        for idx, row in filtered_df.iterrows():
-            with st.container():
-                col1, col2, col3, col4, col5, col6 = st.columns([0.5, 2, 1, 1, 1, 1])
-                
-                with col1:
-                    st.markdown(f"**{row['format']}**")
-                
-                with col2:
-                    st.markdown(f"{row['nom'][:45]}...")
-                    st.caption(f"{row['usp']} • {row['hook']}")
-                
-                with col3:
-                    if has_daily and row['nom'] in sparklines:
-                        fig, trend = create_sparkline_chart(sparklines[row['nom']], metric='ctr', height=50)
-                        if fig:
-                            st.plotly_chart(fig, use_container_width=True, key=f"spark_table_{idx}")
-                        trend_color = "green" if trend > 10 else "red" if trend < -10 else "gray"
-                        st.markdown(f"<small style='color:{trend_color}'>{trend:+.0f}%</small>", unsafe_allow_html=True)
-                    else:
-                        st.caption("Pas de données")
-                
-                with col4:
-                    st.metric("CTR", f"{row['ctr_lien']:.2f}%")
-                
-                with col5:
-                    roas_val = f"{row['roas']:.1f}" if row['roas'] > 0 else "-"
-                    st.metric("ROAS", roas_val)
-                
-                with col6:
-                    action_icons = {'scale': '🚀', 'test': '⚡', 'monitor': '👁️', 'pause': '⏸️'}
-                    st.metric("Potentiel", f"{row['scale_potential']} {action_icons.get(row['action'], '')}")
-                
-                st.divider()
+        # Afficher le tableau
+        display_cols = ['format', 'nom', 'impressions', 'clics_lien', 'ctr_lien', 
+                        'achats', 'roas', 'depense', 'frequency', 'scale_potential', 'action']
+        
+        display_df = filtered_df[display_cols].copy()
+        display_df.columns = ['Format', 'Nom', 'Impressions', 'Clics', 'CTR %', 
+                              'Achats', 'ROAS', 'Dépense €', 'Frequency', 'Potentiel', 'Action']
+        
+        # Tronquer les noms
+        display_df['Nom'] = display_df['Nom'].str[:50] + '...'
+        
+        st.dataframe(
+            display_df,
+            use_container_width=True,
+            height=500,
+            column_config={
+                "Potentiel": st.column_config.ProgressColumn(
+                    "Potentiel",
+                    format="%d",
+                    min_value=0,
+                    max_value=100,
+                ),
+                "ROAS": st.column_config.NumberColumn(format="%.2f"),
+                "CTR %": st.column_config.NumberColumn(format="%.2f"),
+                "Dépense €": st.column_config.NumberColumn(format="%.2f €"),
+                "Frequency": st.column_config.NumberColumn(format="%.2f"),
+            }
+        )
         
         # Export
         st.download_button(
@@ -1189,10 +1241,8 @@ def main():
             comparison_data = []
             for metric, label, higher_better in metrics:
                 row = {'Métrique': label}
-                values = []
                 for nom in selected:
                     val = compare_df[compare_df['nom'] == nom][metric].values[0]
-                    values.append(val)
                     short_name = nom[:25] + '...'
                     row[short_name] = round(val, 2) if isinstance(val, float) else val
                 
@@ -1226,14 +1276,13 @@ def main():
                 for m in radar_metrics:
                     max_val = df[m].max() if df[m].max() > 0 else 1
                     if m == 'trend_score':
-                        # Normaliser tendance entre 0 et 100
-                        val = (row[m] + 100) / 2  # -100 à +100 devient 0 à 100
+                        val = (row[m] + 100) / 2
                     elif m == 'coefficient_confiance':
                         val = row[m] * 100
                     else:
                         val = (row[m] / max_val) * 100
                     values.append(val)
-                values.append(values[0])  # Fermer le polygone
+                values.append(values[0])
                 
                 labels = [radar_labels.get(m, m) for m in radar_metrics] + [radar_labels.get(radar_metrics[0], radar_metrics[0])]
                 
