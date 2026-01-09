@@ -1,17 +1,11 @@
 """
-Meta Ads Creative Intelligence Dashboard V2.2
+Meta Ads Creative Intelligence Dashboard V2.3
 =============================================
 Application de pilotage des créatives publicitaires Meta Ads.
-Avec tableau amélioré : scores détaillés, grades, tendances, sparklines.
-
-Installation:
-    pip install streamlit pandas numpy plotly
-
-Lancement:
-    streamlit run meta_ads_dashboard.py
+Tableau avec composants natifs Streamlit pour un affichage fiable.
 
 Auteur: BNB Solutions Digitales
-Version: 2.2
+Version: 2.3
 """
 
 import streamlit as st
@@ -20,8 +14,6 @@ import numpy as np
 from datetime import datetime, timedelta
 import plotly.express as px
 import plotly.graph_objects as go
-from io import StringIO
-import json
 import re
 
 # Configuration de la page
@@ -32,7 +24,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS personnalisé
+# CSS personnalisé simplifié
 st.markdown("""
 <style>
     .main-header {
@@ -41,13 +33,6 @@ st.markdown("""
         border-radius: 12px;
         color: white;
         margin-bottom: 2rem;
-    }
-    .metric-card {
-        background: white;
-        padding: 1.5rem;
-        border-radius: 12px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        text-align: center;
     }
     .action-card {
         padding: 1rem;
@@ -69,96 +54,8 @@ st.markdown("""
     .trend-up { background: #D1FAE5; color: #065F46; }
     .trend-down { background: #FEE2E2; color: #991B1B; }
     .trend-stable { background: #F3F4F6; color: #374151; }
-    
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        padding: 10px 20px;
-        border-radius: 8px;
-    }
-    
-    /* Custom table styles */
-    .custom-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
-        margin-top: 1rem;
-    }
-    .custom-table th {
-        background: #F8FAFC;
-        padding: 12px 8px;
-        text-align: left;
-        font-weight: 600;
-        border-bottom: 2px solid #E5E7EB;
-        white-space: nowrap;
-        position: sticky;
-        top: 0;
-    }
-    .custom-table td {
-        padding: 10px 8px;
-        border-bottom: 1px solid #F3F4F6;
-        vertical-align: middle;
-    }
-    .custom-table tr:hover {
-        background: #F8FAFC !important;
-    }
-    .custom-table .action-badge {
-        padding: 4px 8px;
-        border-radius: 12px;
-        font-size: 11px;
-        font-weight: 600;
-    }
-    .badge-scale { background: #D1FAE5; color: #065F46; }
-    .badge-test { background: #DBEAFE; color: #1E40AF; }
-    .badge-monitor { background: #FEF3C7; color: #92400E; }
-    .badge-pause { background: #FEE2E2; color: #991B1B; }
-    
-    .format-badge {
-        padding: 2px 8px;
-        border-radius: 4px;
-        font-size: 11px;
-        font-weight: 600;
-    }
-    .format-img { background: #DBEAFE; color: #1E40AF; }
-    .format-vid { background: #E0E7FF; color: #3730A3; }
-    .format-gif { background: #D1FAE5; color: #065F46; }
-    .format-car { background: #FEF3C7; color: #92400E; }
-    
-    .score-cell {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        white-space: nowrap;
-    }
-    .score-bar {
-        width: 50px;
-        height: 8px;
-        background: #E5E7EB;
-        border-radius: 4px;
-        overflow: hidden;
-    }
-    .score-bar-fill {
-        height: 100%;
-        border-radius: 4px;
-    }
-    .grade-badge {
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-weight: bold;
-        font-size: 11px;
-        color: white;
-    }
-    .var-positive { color: #065F46; font-size: 11px; }
-    .var-negative { color: #991B1B; font-size: 11px; }
-    .var-neutral { color: #6B7280; font-size: 11px; }
-    
-    .table-container {
-        max-height: 600px;
-        overflow-y: auto;
-        border: 1px solid #E5E7EB;
-        border-radius: 8px;
-    }
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
+    .stTabs [data-baseweb="tab"] { padding: 10px 20px; border-radius: 8px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -263,16 +160,12 @@ def load_and_process_data(uploaded_file):
     
     if df['clics_lien'].sum() == 0 and 'clics_tous' in df.columns:
         df['clics_lien'] = df['clics_tous']
-    
     if df['ctr_lien'].sum() == 0 and 'ctr_tous' in df.columns:
         df['ctr_lien'] = df['ctr_tous']
-    
     if df['cpc_lien'].sum() == 0 and 'cpc_tous' in df.columns:
         df['cpc_lien'] = df['cpc_tous']
-    
     if df['frequency'].sum() == 0:
         df['frequency'] = np.where(df['reach'] > 0, df['impressions'] / df['reach'], 1)
-    
     if 'nom' in df.columns:
         df = df[df['nom'].notna() & (df['nom'] != '')]
     
@@ -355,13 +248,10 @@ def calculate_trends_from_daily(df_daily, lookback_days=14):
         
         ctr_recent = safe_mean(df_recent['ctr_lien']) if 'ctr_lien' in df_recent.columns else 0
         ctr_prec = safe_mean(df_precedent['ctr_lien']) if 'ctr_lien' in df_precedent.columns else 0
-        
         cpc_recent = safe_mean(df_recent['cpc_lien']) if 'cpc_lien' in df_recent.columns else 0
         cpc_prec = safe_mean(df_precedent['cpc_lien']) if 'cpc_lien' in df_precedent.columns else 0
-        
         cpm_recent = safe_mean(df_recent['cpm']) if 'cpm' in df_recent.columns else 0
         cpm_prec = safe_mean(df_precedent['cpm']) if 'cpm' in df_precedent.columns else 0
-        
         impr_recent = df_recent['impressions'].sum() if 'impressions' in df_recent.columns else 0
         impr_prec = df_precedent['impressions'].sum() if 'impressions' in df_precedent.columns else 0
         
@@ -370,13 +260,7 @@ def calculate_trends_from_daily(df_daily, lookback_days=14):
         trend_cpm = calc_trend(cpm_recent, cpm_prec)
         trend_impr = calc_trend(impr_recent, impr_prec)
         
-        trend_score = (
-            0.40 * trend_ctr +
-            0.25 * (-trend_cpc) +
-            0.20 * (-trend_cpm) +
-            0.15 * trend_impr
-        )
-        
+        trend_score = 0.40 * trend_ctr + 0.25 * (-trend_cpc) + 0.20 * (-trend_cpm) + 0.15 * trend_impr
         signal = 'up' if trend_score > 15 else 'down' if trend_score < -15 else 'stable'
         
         trends[nom] = {
@@ -422,7 +306,7 @@ def parse_creative_name(nom):
         hook = 'Problème/Solution'
     elif 'probleme/frustation' in nom_lower or 'problème/frustration' in nom_lower:
         hook = 'Problème/Frustration'
-    elif ' pv ' in nom_lower or nom_lower.startswith('pv ') or ' - pv -' in nom_lower or '--pv--' in nom_lower:
+    elif ' pv ' in nom_lower or nom_lower.startswith('pv ') or '--pv--' in nom_lower:
         hook = 'Proposition de Valeur'
     elif 'produit neutre' in nom_lower:
         hook = 'Produit neutre'
@@ -436,34 +320,21 @@ def calculate_confidence(row):
     achats = row.get('achats', 0)
     clics = row.get('clics_lien', 0)
     
-    if impressions < 1000:
-        score_impr = 0.3
-    elif impressions < 5000:
-        score_impr = 0.5
-    elif impressions < 10000:
-        score_impr = 0.7
-    elif impressions < 50000:
-        score_impr = 0.85
-    else:
-        score_impr = 1.0
+    if impressions < 1000: score_impr = 0.3
+    elif impressions < 5000: score_impr = 0.5
+    elif impressions < 10000: score_impr = 0.7
+    elif impressions < 50000: score_impr = 0.85
+    else: score_impr = 1.0
     
-    if achats < 5:
-        score_conv = 0.4
-    elif achats < 15:
-        score_conv = 0.6
-    elif achats < 30:
-        score_conv = 0.8
-    else:
-        score_conv = 1.0
+    if achats < 5: score_conv = 0.4
+    elif achats < 15: score_conv = 0.6
+    elif achats < 30: score_conv = 0.8
+    else: score_conv = 1.0
     
-    if clics < 50:
-        score_clics = 0.5
-    elif clics < 200:
-        score_clics = 0.7
-    elif clics < 500:
-        score_clics = 0.85
-    else:
-        score_clics = 1.0
+    if clics < 50: score_clics = 0.5
+    elif clics < 200: score_clics = 0.7
+    elif clics < 500: score_clics = 0.85
+    else: score_clics = 1.0
     
     return round(0.3 * score_impr + 0.4 * score_conv + 0.3 * score_clics, 2)
 
@@ -472,30 +343,19 @@ def calculate_scale_potential(row, score_global_ajuste, coef_conf, trend_score=0
     """Calcule le potentiel de scale."""
     perf_score = min(100, max(0, score_global_ajuste))
     
-    if trend_score > 50:
-        trend_component = 90
-    elif trend_score > 20:
-        trend_component = 75
-    elif trend_score > 0:
-        trend_component = 60
-    elif trend_score > -20:
-        trend_component = 40
-    else:
-        trend_component = 20
+    if trend_score > 50: trend_component = 90
+    elif trend_score > 20: trend_component = 75
+    elif trend_score > 0: trend_component = 60
+    elif trend_score > -20: trend_component = 40
+    else: trend_component = 20
     
     freq = row.get('frequency', 2)
-    if freq < 1.5:
-        freq_score = 100
-    elif freq < 2.0:
-        freq_score = 85
-    elif freq < 2.5:
-        freq_score = 70
-    elif freq < 3.0:
-        freq_score = 55
-    elif freq < 4.0:
-        freq_score = 35
-    else:
-        freq_score = 15
+    if freq < 1.5: freq_score = 100
+    elif freq < 2.0: freq_score = 85
+    elif freq < 2.5: freq_score = 70
+    elif freq < 3.0: freq_score = 55
+    elif freq < 4.0: freq_score = 35
+    else: freq_score = 15
     
     conf_score = coef_conf * 100
     
@@ -511,31 +371,12 @@ def calculate_scale_potential(row, score_global_ajuste, coef_conf, trend_score=0
 
 
 def get_grade(score):
-    """Retourne le grade et la couleur basés sur le score."""
-    if score >= 70:
-        return 'A', '#10B981'  # Vert
-    elif score >= 60:
-        return 'B', '#34D399'  # Vert clair
-    elif score >= 50:
-        return 'C', '#FBBF24'  # Jaune/Orange
-    elif score >= 40:
-        return 'D', '#F97316'  # Orange
-    else:
-        return 'F', '#EF4444'  # Rouge
-
-
-def get_bar_color(score):
-    """Retourne la couleur de la barre basée sur le score."""
-    if score >= 70:
-        return '#10B981'  # Vert
-    elif score >= 60:
-        return '#34D399'  # Vert clair
-    elif score >= 50:
-        return '#FBBF24'  # Jaune
-    elif score >= 40:
-        return '#F97316'  # Orange
-    else:
-        return '#EF4444'  # Rouge
+    """Retourne le grade basé sur le score."""
+    if score >= 70: return 'A'
+    elif score >= 60: return 'B'
+    elif score >= 50: return 'C'
+    elif score >= 40: return 'D'
+    else: return 'F'
 
 
 def calculate_scores(df, trends=None):
@@ -565,8 +406,7 @@ def calculate_scores(df, trends=None):
     reach_mean, reach_std = calc_stats(df['reach'])
     clics_mean, clics_std = calc_stats(df['clics_lien'])
     
-    df['cvr'] = np.where(df['clics_lien'] > 0, 
-                         (df['achats'] / df['clics_lien']) * 100, 0)
+    df['cvr'] = np.where(df['clics_lien'] > 0, (df['achats'] / df['clics_lien']) * 100, 0)
     cvr_mean, cvr_std = calc_stats(df['cvr'])
     
     df['cpa_calc'] = np.where(df['achats'] > 0, df['depense'] / df['achats'], 0)
@@ -607,7 +447,6 @@ def calculate_scores(df, trends=None):
         
         potential = calculate_scale_potential(row_dict, score_global_ajuste, coef_conf, trend_score)
         
-        # Calcul des variations basées sur les tendances
         var_profit = round(trend_score * 0.15) if trend_score != 0 else 0
         var_trafic = round(trend_ctr * 0.3) if trend_ctr != 0 else 0
         var_notoriete = round(-trend_cpm * 0.2) if trend_cpm != 0 else 0
@@ -647,7 +486,7 @@ def calculate_scores(df, trends=None):
 
 
 def determine_action(row, trends=None):
-    """Détermine l'action recommandée pour une créative."""
+    """Détermine l'action recommandée."""
     potential = row['scale_potential']
     conf = row['coefficient_confiance']
     freq = row.get('frequency', 2)
@@ -660,8 +499,6 @@ def determine_action(row, trends=None):
         return 'scale'
     elif conf < 0.6 and (roas > 5 or potential > 50):
         return 'test'
-    elif freq > 3 or trend_score < -10:
-        return 'monitor'
     else:
         return 'monitor'
 
@@ -677,105 +514,43 @@ def generate_recommendation(row, trends=None):
     
     if action == 'scale':
         pct = '+30%' if potential >= 70 else '+20%'
-        trend_info = f" (tendance +{trend_score:.0f}%)" if trend_score > 10 else ""
-        return f"Potentiel {potential}{trend_info} → Augmenter budget {pct}"
+        return f"Potentiel {potential} → Budget {pct}"
     elif action == 'pause':
         if trend_score < -30:
-            return f"Tendance en chute ({trend_score:.0f}%) → Pauser"
-        return f"Frequency trop élevée ({freq:.1f}) → Pauser"
+            return f"Tendance {trend_score:.0f}% → Pauser"
+        return f"Frequency {freq:.1f} → Pauser"
     elif action == 'test':
-        return f"ROAS {roas:.1f} prometteur, confiance {conf*100:.0f}% → Tester +50% budget"
+        return f"Confiance {conf*100:.0f}% → Tester +50%"
     else:
         if freq > 3:
-            return f"Frequency {freq:.1f} → Surveiller fatigue"
-        if trend_score < -10:
-            return f"Légère baisse ({trend_score:.0f}%) → À surveiller"
-        return "Performances stables → Maintenir"
+            return f"Frequency {freq:.1f} → Surveiller"
+        return "Stable → Maintenir"
 
 
-def render_score_cell_html(score, variation=0):
-    """Génère le HTML pour une cellule de score avec barre, grade et variation."""
-    grade, grade_color = get_grade(score)
-    bar_color = get_bar_color(score)
-    
-    # Variation HTML
+def format_score_with_grade(score, variation=0):
+    """Formate un score avec grade et variation pour affichage."""
+    grade = get_grade(score)
     if variation > 0:
-        var_html = f'<span class="var-positive">(+{variation})</span>'
+        var_str = f" (+{variation})"
     elif variation < 0:
-        var_html = f'<span class="var-negative">({variation})</span>'
+        var_str = f" ({variation})"
     else:
-        var_html = ''
-    
-    html = f'''
-    <div class="score-cell">
-        <div class="score-bar">
-            <div class="score-bar-fill" style="width: {score}%; background: {bar_color};"></div>
-        </div>
-        <span style="font-weight: 600; min-width: 20px;">{score}</span>
-        <span class="grade-badge" style="background: {grade_color};">{grade}</span>
-        {var_html}
-    </div>
-    '''
-    return html
+        var_str = ""
+    return f"{score} {grade}{var_str}"
 
 
-def render_sparkline_svg(sparkline_data, width=70, height=20):
-    """Génère un SVG pour sparkline."""
+def create_sparkline_plotly(sparkline_data, width=120, height=40):
+    """Crée un mini graphique sparkline avec Plotly."""
     if not sparkline_data:
-        return '<span style="color: #9CA3AF; font-size: 11px;">-</span>'
+        return None
     
     values = [d.get('ctr', 0) for d in sparkline_data]
     if max(values) == 0:
-        return '<span style="color: #9CA3AF; font-size: 11px;">-</span>'
+        return None
     
-    max_val = max(values) if max(values) > 0 else 1
-    min_val = min([v for v in values if v > 0]) if any(v > 0 for v in values) else 0
-    range_val = max_val - min_val if max_val > min_val else 1
-    
-    # Calculer tendance
     recent_avg = np.mean(values[-4:]) if len(values) >= 4 else np.mean(values)
     old_avg = np.mean(values[:4]) if len(values) >= 4 else np.mean(values)
     trend = ((recent_avg - old_avg) / old_avg * 100) if old_avg > 0 else 0
-    
-    color = '#10B981' if trend > 10 else '#EF4444' if trend < -10 else '#6B7280'
-    
-    # Générer les points
-    points = []
-    for i, v in enumerate(values):
-        x = (i / (len(values) - 1)) * width if len(values) > 1 else width / 2
-        y = height - ((v - min_val) / range_val * (height - 4)) - 2 if range_val > 0 else height / 2
-        points.append(f"{x:.1f},{y:.1f}")
-    
-    points_str = ' '.join(points)
-    
-    trend_text = f"+{trend:.0f}%" if trend > 0 else f"{trend:.0f}%"
-    trend_color = '#10B981' if trend > 10 else '#EF4444' if trend < -10 else '#6B7280'
-    
-    svg = f'''
-    <div style="display: flex; align-items: center; gap: 6px;">
-        <svg width="{width}" height="{height}" style="overflow: visible;">
-            <polyline points="{points_str}" fill="none" stroke="{color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <span style="color: {trend_color}; font-size: 11px; font-weight: 600;">{trend_text}</span>
-    </div>
-    '''
-    return svg
-
-
-def create_sparkline_chart(sparkline_data, metric='ctr', height=60):
-    """Crée un graphique sparkline avec Plotly."""
-    if not sparkline_data:
-        return None, 0
-    
-    values = [d.get(metric, 0) for d in sparkline_data]
-    
-    non_zero = [v for v in values if v > 0]
-    if len(non_zero) >= 2:
-        recent_avg = np.mean(values[-4:]) if len(values) >= 4 else np.mean(values)
-        old_avg = np.mean(values[:4]) if len(values) >= 4 else np.mean(values)
-        trend = ((recent_avg - old_avg) / old_avg * 100) if old_avg > 0 else 0
-    else:
-        trend = 0
     
     color = '#10B981' if trend > 10 else '#EF4444' if trend < -10 else '#6B7280'
     
@@ -783,13 +558,13 @@ def create_sparkline_chart(sparkline_data, metric='ctr', height=60):
     fig.add_trace(go.Scatter(
         x=list(range(len(values))),
         y=values,
-        mode='lines+markers',
+        mode='lines',
         line=dict(color=color, width=2),
-        marker=dict(size=4, color=color),
-        hovertemplate='%{y:.2f}<extra></extra>'
+        hoverinfo='skip'
     ))
     
     fig.update_layout(
+        width=width,
         height=height,
         margin=dict(l=0, r=0, t=0, b=0),
         paper_bgcolor='rgba(0,0,0,0)',
@@ -821,19 +596,13 @@ def main():
         
         import_mode = st.radio(
             "Mode d'import",
-            ["Données agrégées uniquement", "Agrégées + Quotidiennes (recommandé)"],
-            help="Le mode quotidien permet d'avoir les tendances et sparklines"
+            ["Données agrégées uniquement", "Agrégées + Quotidiennes (recommandé)"]
         )
         
         st.divider()
         
         st.subheader("1️⃣ Données agrégées")
-        st.caption("Export Meta Ads sur la période complète")
-        uploaded_main = st.file_uploader(
-            "Fichier principal (période complète)",
-            type=['csv'],
-            key="main_file"
-        )
+        uploaded_main = st.file_uploader("Fichier principal", type=['csv'], key="main_file")
         
         if uploaded_main:
             st.success(f"✅ {uploaded_main.name}")
@@ -842,63 +611,23 @@ def main():
         if import_mode == "Agrégées + Quotidiennes (recommandé)":
             st.divider()
             st.subheader("2️⃣ Données quotidiennes")
-            st.caption("Export Meta Ads jour par jour")
-            uploaded_daily = st.file_uploader(
-                "Fichier quotidien (jour par jour)",
-                type=['csv'],
-                key="daily_file"
-            )
+            uploaded_daily = st.file_uploader("Fichier quotidien", type=['csv'], key="daily_file")
             
             if uploaded_daily:
                 st.success(f"✅ {uploaded_daily.name}")
-            else:
-                st.info("💡 Sans ce fichier, pas de tendances")
         
         st.divider()
         st.header("⚙️ Paramètres")
-        
-        min_impressions = st.slider(
-            "Impressions minimum",
-            min_value=0,
-            max_value=10000,
-            value=500,
-            step=100
-        )
-        
-        st.divider()
-        
-        with st.expander("📖 Guide export Meta Ads"):
-            st.markdown("""
-            **Export agrégé :**
-            1. Meta Ads Manager → Publicité
-            2. Période : 30 jours
-            3. Ventilation : **Aucune**
-            4. Exporter CSV
-            
-            **Export quotidien :**
-            - Même chose mais Ventilation : **Par jour**
-            """)
+        min_impressions = st.slider("Impressions minimum", 0, 10000, 500, 100)
         
         st.divider()
         st.markdown("""
-        **Légende:**
-        - 🚀 Scaler
-        - ⚡ Tester
-        - 👁️ Surveiller
-        - ⏸️ Pauser
+        **Légende:** 🚀 Scaler · ⚡ Tester · 👁️ Surveiller · ⏸️ Pauser
         """)
     
     # Page principale
     if uploaded_main is None:
         st.info("👈 Chargez votre export Meta Ads pour commencer.")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.subheader("📊 Export agrégé")
-            st.markdown("Fichier avec les **totaux** (1 ligne/créative)")
-        with col2:
-            st.subheader("📈 Export quotidien")
-            st.markdown("Fichier **jour par jour** pour les tendances")
         return
     
     # Charger les données
@@ -932,8 +661,6 @@ def main():
             
     except Exception as e:
         st.error(f"❌ Erreur: {str(e)}")
-        import traceback
-        st.code(traceback.format_exc())
         return
     
     if has_daily:
@@ -1012,7 +739,7 @@ def main():
         
         with col_right:
             st.subheader("⚡ À tester")
-            test_df = df[df['action'] == 'test'].sort_values('roas', ascending=False)
+            test_df = df[df['action'] == 'test'].sort_values('scale_potential', ascending=False)
             
             if len(test_df) > 0:
                 for _, row in test_df.iterrows():
@@ -1059,12 +786,6 @@ def main():
             usp_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'CTR %', 'Potentiel']
             usp_stats = usp_stats.sort_values('Potentiel', ascending=False)
             st.dataframe(usp_stats, use_container_width=True)
-            
-            if len(usp_stats) > 0:
-                fig = px.bar(usp_stats.reset_index(), x='usp', y='Potentiel',
-                           color='Potentiel', color_continuous_scale='Greens')
-                fig.update_layout(showlegend=False, height=300)
-                st.plotly_chart(fig, use_container_width=True)
         
         with col2:
             st.subheader("🎣 Par Hook")
@@ -1075,12 +796,6 @@ def main():
             hook_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'CTR %', 'Potentiel']
             hook_stats = hook_stats.sort_values('Potentiel', ascending=False)
             st.dataframe(hook_stats, use_container_width=True)
-            
-            if len(hook_stats) > 0:
-                fig = px.bar(hook_stats.reset_index(), x='hook', y='CTR %',
-                           color='ROAS', color_continuous_scale='Blues')
-                fig.update_layout(height=300)
-                st.plotly_chart(fig, use_container_width=True)
         
         st.divider()
         best_usp = usp_stats.index[0] if len(usp_stats) > 0 else "N/A"
@@ -1105,12 +820,17 @@ def main():
         with col2:
             action_filter = st.multiselect("Action", options=df['action'].unique(), default=list(df['action'].unique()))
         with col3:
-            sort_by = st.selectbox("Trier par", options=['score_global', 'scale_potential', 'score_profitabilite', 'score_trafic', 'score_notoriete'],
-                format_func=lambda x: {'score_global': '⭐ Global', 'scale_potential': 'Potentiel', 'score_profitabilite': '💰 Profit', 'score_trafic': '🚀 Trafic', 'score_notoriete': '👁️ Notoriété'}.get(x, x))
+            sort_by = st.selectbox("Trier par", 
+                options=['score_global', 'scale_potential', 'score_profitabilite', 'score_trafic', 'score_notoriete', 'trend_score'],
+                format_func=lambda x: {
+                    'score_global': '⭐ Global', 'scale_potential': 'Potentiel', 
+                    'score_profitabilite': '💰 Profit', 'score_trafic': '🚀 Trafic', 
+                    'score_notoriete': '👁️ Notoriété', 'trend_score': '📈 Tendance'
+                }.get(x, x))
         with col4:
             sort_order = st.radio("Ordre", ["Décroissant", "Croissant"], horizontal=True)
         
-        # Filtrer
+        # Filtrer et trier
         filtered_df = df[
             (df['format'].isin(format_filter)) &
             (df['action'].isin(action_filter))
@@ -1118,87 +838,130 @@ def main():
         
         st.caption(f"{len(filtered_df)} créatives affichées")
         
-        # Générer le tableau HTML
-        table_html = '''
-        <div class="table-container">
-        <table class="custom-table">
-            <thead>
-                <tr>
-                    <th style="width: 40px;">#</th>
-                    <th style="width: 55px;">Format</th>
-                    <th style="width: 200px;">Nom</th>
-                    <th style="width: 100px;">Évolution</th>
-                    <th style="width: 140px;">💰 Profit</th>
-                    <th style="width: 140px;">🚀 Trafic</th>
-                    <th style="width: 140px;">👁️ Notoriété</th>
-                    <th style="width: 140px;">⭐ Global</th>
-                    <th style="width: 70px;">Potentiel</th>
-                    <th style="width: 70px;">Action</th>
-                </tr>
-            </thead>
-            <tbody>
-        '''
+        # Préparer le dataframe pour l'affichage
+        display_df = filtered_df.copy()
         
-        for idx, (_, row) in enumerate(filtered_df.iterrows(), 1):
-            # Format badge
-            format_class = f"format-{row['format'].lower()}"
-            
-            # Action badge
-            action_class = f"badge-{row['action']}"
-            action_icons = {'scale': '🚀', 'test': '⚡', 'monitor': '👁️', 'pause': '⏸️'}
-            action_icon = action_icons.get(row['action'], '')
-            
-            # Sparkline
-            sparkline_html = "-"
-            if has_daily and row['nom'] in sparklines:
-                sparkline_html = render_sparkline_svg(sparklines[row['nom']])
-            
-            # Scores avec grades et variations
-            profit_html = render_score_cell_html(row['score_profitabilite'], row.get('var_profit', 0))
-            trafic_html = render_score_cell_html(row['score_trafic'], row.get('var_trafic', 0))
-            notoriete_html = render_score_cell_html(row['score_notoriete'], row.get('var_notoriete', 0))
-            global_html = render_score_cell_html(row['score_global'], row.get('var_global', 0))
-            
-            # Potentiel avec barre
-            pot_color = get_bar_color(row['scale_potential'])
-            
-            # Couleur de ligne selon action
-            row_bg = {
-                'scale': '#F0FDF4',
-                'test': '#EFF6FF',
-                'monitor': '#FFFBEB',
-                'pause': '#FEF2F2'
-            }.get(row['action'], '#FFFFFF')
-            
-            table_html += f'''
-                <tr style="background-color: {row_bg};">
-                    <td>{idx}</td>
-                    <td><span class="format-badge {format_class}">{row['format']}</span></td>
-                    <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{row['nom']}">{row['nom'][:35]}...</td>
-                    <td>{sparkline_html}</td>
-                    <td>{profit_html}</td>
-                    <td>{trafic_html}</td>
-                    <td>{notoriete_html}</td>
-                    <td>{global_html}</td>
-                    <td>
-                        <div style="display: flex; align-items: center; gap: 4px;">
-                            <div style="width: 35px; height: 6px; background: #E5E7EB; border-radius: 3px; overflow: hidden;">
-                                <div style="width: {row['scale_potential']}%; height: 100%; background: {pot_color};"></div>
-                            </div>
-                            <span style="font-weight: 600; font-size: 12px;">{row['scale_potential']}</span>
-                        </div>
-                    </td>
-                    <td><span class="action-badge {action_class}">{action_icon}</span></td>
-                </tr>
-            '''
+        # Formater les colonnes de score avec grades
+        display_df['💰 Profit'] = display_df.apply(
+            lambda r: f"{r['score_profitabilite']} {get_grade(r['score_profitabilite'])}" + 
+                     (f" (+{r['var_profit']})" if r['var_profit'] > 0 else f" ({r['var_profit']})" if r['var_profit'] < 0 else ""), 
+            axis=1
+        )
+        display_df['🚀 Trafic'] = display_df.apply(
+            lambda r: f"{r['score_trafic']} {get_grade(r['score_trafic'])}" + 
+                     (f" (+{r['var_trafic']})" if r['var_trafic'] > 0 else f" ({r['var_trafic']})" if r['var_trafic'] < 0 else ""), 
+            axis=1
+        )
+        display_df['👁️ Notoriété'] = display_df.apply(
+            lambda r: f"{r['score_notoriete']} {get_grade(r['score_notoriete'])}" + 
+                     (f" (+{r['var_notoriete']})" if r['var_notoriete'] > 0 else f" ({r['var_notoriete']})" if r['var_notoriete'] < 0 else ""), 
+            axis=1
+        )
+        display_df['⭐ Global'] = display_df.apply(
+            lambda r: f"{r['score_global']} {get_grade(r['score_global'])}" + 
+                     (f" (+{r['var_global']})" if r['var_global'] > 0 else f" ({r['var_global']})" if r['var_global'] < 0 else ""), 
+            axis=1
+        )
         
-        table_html += '''
-            </tbody>
-        </table>
-        </div>
-        '''
+        # Formater la tendance
+        if has_daily:
+            display_df['📈 Tendance'] = display_df['trend_score'].apply(
+                lambda x: f"{'↗' if x > 10 else '↘' if x < -10 else '→'} {x:+.0f}%" if x != 0 else "→ 0%"
+            )
+        else:
+            display_df['📈 Tendance'] = "-"
         
-        st.markdown(table_html, unsafe_allow_html=True)
+        # Formater l'action
+        action_icons = {'scale': '🚀 Scale', 'test': '⚡ Test', 'monitor': '👁️ Monitor', 'pause': '⏸️ Pause'}
+        display_df['Action'] = display_df['action'].map(action_icons)
+        
+        # Tronquer le nom
+        display_df['Nom'] = display_df['nom'].str[:40] + '...'
+        
+        # Sélectionner les colonnes à afficher
+        columns_to_show = ['format', 'Nom', '📈 Tendance', '💰 Profit', '🚀 Trafic', '👁️ Notoriété', '⭐ Global', 'scale_potential', 'Action']
+        
+        final_df = display_df[columns_to_show].copy()
+        final_df.columns = ['Format', 'Nom', 'Tendance', 'Profit', 'Trafic', 'Notoriété', 'Global', 'Potentiel', 'Action']
+        
+        # Afficher avec st.dataframe et configuration de colonnes
+        st.dataframe(
+            final_df,
+            use_container_width=True,
+            height=500,
+            column_config={
+                "Format": st.column_config.TextColumn("Format", width="small"),
+                "Nom": st.column_config.TextColumn("Nom", width="large"),
+                "Tendance": st.column_config.TextColumn("Tendance", width="small"),
+                "Profit": st.column_config.TextColumn("💰 Profit", width="medium"),
+                "Trafic": st.column_config.TextColumn("🚀 Trafic", width="medium"),
+                "Notoriété": st.column_config.TextColumn("👁️ Notoriété", width="medium"),
+                "Global": st.column_config.TextColumn("⭐ Global", width="medium"),
+                "Potentiel": st.column_config.ProgressColumn(
+                    "Potentiel",
+                    format="%d",
+                    min_value=0,
+                    max_value=100,
+                    width="medium"
+                ),
+                "Action": st.column_config.TextColumn("Action", width="small"),
+            },
+            hide_index=True
+        )
+        
+        st.divider()
+        
+        # Détail d'une créative sélectionnée
+        st.subheader("🔍 Détail créative")
+        selected_creative = st.selectbox(
+            "Sélectionner une créative pour voir le détail",
+            options=filtered_df['nom'].tolist(),
+            format_func=lambda x: f"{filtered_df[filtered_df['nom']==x]['format'].values[0]} | {x[:50]}..."
+        )
+        
+        if selected_creative:
+            row = filtered_df[filtered_df['nom'] == selected_creative].iloc[0]
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.markdown("**📊 Métriques**")
+                st.write(f"Impressions: {row['impressions']:,.0f}")
+                st.write(f"Clics: {row['clics_lien']:,.0f}")
+                st.write(f"CTR: {row['ctr_lien']:.2f}%")
+                st.write(f"CPC: {row['cpc_lien']:.2f}€")
+                st.write(f"CPM: {row['cpm']:.2f}€")
+            
+            with col2:
+                st.markdown("**💰 Conversions**")
+                st.write(f"Achats: {row['achats']:,.0f}")
+                st.write(f"ROAS: {row['roas']:.2f}")
+                st.write(f"Dépense: {row['depense']:.2f}€")
+                st.write(f"Frequency: {row['frequency']:.2f}")
+                st.write(f"Confiance: {row['coefficient_confiance']*100:.0f}%")
+            
+            with col3:
+                st.markdown("**🎯 Scores**")
+                st.write(f"Profit: {row['score_profitabilite']} ({get_grade(row['score_profitabilite'])})")
+                st.write(f"Trafic: {row['score_trafic']} ({get_grade(row['score_trafic'])})")
+                st.write(f"Notoriété: {row['score_notoriete']} ({get_grade(row['score_notoriete'])})")
+                st.write(f"Global: {row['score_global']} ({get_grade(row['score_global'])})")
+                st.write(f"**Potentiel: {row['scale_potential']}**")
+            
+            # Sparkline si disponible
+            if has_daily and selected_creative in sparklines:
+                st.markdown("**📈 Évolution CTR (14 jours)**")
+                result = create_sparkline_plotly(sparklines[selected_creative], width=400, height=100)
+                if result:
+                    fig, trend = result
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.plotly_chart(fig, use_container_width=True)
+                    with col2:
+                        trend_color = "green" if trend > 10 else "red" if trend < -10 else "gray"
+                        st.metric("Tendance 7j", f"{trend:+.0f}%")
+            
+            st.info(f"**Recommandation:** {row['recommendation']}")
         
         st.divider()
         
@@ -1245,10 +1008,10 @@ def main():
                 row = compare_df[compare_df['nom'] == nom].iloc[0]
                 score_data.append({
                     'Créative': nom[:30] + '...',
-                    'Profit': f"{row['score_profitabilite']} ({get_grade(row['score_profitabilite'])[0]})",
-                    'Trafic': f"{row['score_trafic']} ({get_grade(row['score_trafic'])[0]})",
-                    'Notoriété': f"{row['score_notoriete']} ({get_grade(row['score_notoriete'])[0]})",
-                    'Global': f"{row['score_global']} ({get_grade(row['score_global'])[0]})",
+                    '💰 Profit': f"{row['score_profitabilite']} ({get_grade(row['score_profitabilite'])})",
+                    '🚀 Trafic': f"{row['score_trafic']} ({get_grade(row['score_trafic'])})",
+                    '👁️ Notoriété': f"{row['score_notoriete']} ({get_grade(row['score_notoriete'])})",
+                    '⭐ Global': f"{row['score_global']} ({get_grade(row['score_global'])})",
                     'Potentiel': row['scale_potential'],
                     'Action': row['action']
                 })
