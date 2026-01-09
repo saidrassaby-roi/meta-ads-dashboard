@@ -24,40 +24,144 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS personnalisé simplifié
-st.markdown("""
-<style>
-    .main-header {
-        background: linear-gradient(90deg, #4F46E5 0%, #7C3AED 50%, #EC4899 100%);
-        padding: 1.5rem 2rem;
-        border-radius: 12px;
-        color: white;
-        margin-bottom: 2rem;
-    }
-    .action-card {
-        padding: 1rem;
-        border-radius: 8px;
-        margin-bottom: 0.5rem;
-        border-left: 4px solid;
-    }
-    .scale-card { background: #ECFDF5; border-color: #10B981; }
-    .test-card { background: #EFF6FF; border-color: #3B82F6; }
-    .monitor-card { background: #FFFBEB; border-color: #F59E0B; }
-    .pause-card { background: #FEF2F2; border-color: #EF4444; }
-    .trend-badge {
-        display: inline-block;
-        padding: 2px 8px;
-        border-radius: 12px;
-        font-size: 0.75rem;
-        font-weight: 600;
-    }
-    .trend-up { background: #D1FAE5; color: #065F46; }
-    .trend-down { background: #FEE2E2; color: #991B1B; }
-    .trend-stable { background: #F3F4F6; color: #374151; }
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
-    .stTabs [data-baseweb="tab"] { padding: 10px 20px; border-radius: 8px; }
-</style>
-""", unsafe_allow_html=True)
+# Initialiser le mode sombre dans session_state
+if 'dark_mode' not in st.session_state:
+    st.session_state.dark_mode = False
+
+# CSS personnalisé avec mode sombre
+def get_css(dark_mode=False):
+    if dark_mode:
+        return """
+        <style>
+            .stApp {
+                background-color: #1a1a2e;
+                color: #eaeaea;
+            }
+            .main-header {
+                background: linear-gradient(90deg, #4F46E5 0%, #7C3AED 50%, #EC4899 100%);
+                padding: 1.5rem 2rem;
+                border-radius: 12px;
+                color: white;
+                margin-bottom: 2rem;
+            }
+            .action-card {
+                padding: 1rem;
+                border-radius: 8px;
+                margin-bottom: 0.5rem;
+                border-left: 4px solid;
+            }
+            .scale-card { background: #1e3a2f; border-color: #10B981; }
+            .test-card { background: #1e2a3a; border-color: #3B82F6; }
+            .monitor-card { background: #3a3520; border-color: #F59E0B; }
+            .pause-card { background: #3a1e1e; border-color: #EF4444; }
+            .alert-card {
+                padding: 1rem;
+                border-radius: 8px;
+                margin-bottom: 0.5rem;
+                border-left: 4px solid;
+                background: #2a1e1e;
+                border-color: #EF4444;
+            }
+            .warning-card {
+                padding: 1rem;
+                border-radius: 8px;
+                margin-bottom: 0.5rem;
+                border-left: 4px solid;
+                background: #3a3520;
+                border-color: #F59E0B;
+            }
+            .info-card {
+                padding: 1rem;
+                border-radius: 8px;
+                margin-bottom: 0.5rem;
+                border-left: 4px solid;
+                background: #1e2a3a;
+                border-color: #3B82F6;
+            }
+            .trend-badge {
+                display: inline-block;
+                padding: 2px 8px;
+                border-radius: 12px;
+                font-size: 0.75rem;
+                font-weight: 600;
+            }
+            .trend-up { background: #064e3b; color: #6ee7b7; }
+            .trend-down { background: #7f1d1d; color: #fca5a5; }
+            .trend-stable { background: #374151; color: #d1d5db; }
+            .stTabs [data-baseweb="tab-list"] { gap: 8px; }
+            .stTabs [data-baseweb="tab"] { padding: 10px 20px; border-radius: 8px; }
+            .metric-box {
+                background: #2d2d44;
+                padding: 1rem;
+                border-radius: 8px;
+                text-align: center;
+            }
+        </style>
+        """
+    else:
+        return """
+        <style>
+            .main-header {
+                background: linear-gradient(90deg, #4F46E5 0%, #7C3AED 50%, #EC4899 100%);
+                padding: 1.5rem 2rem;
+                border-radius: 12px;
+                color: white;
+                margin-bottom: 2rem;
+            }
+            .action-card {
+                padding: 1rem;
+                border-radius: 8px;
+                margin-bottom: 0.5rem;
+                border-left: 4px solid;
+            }
+            .scale-card { background: #ECFDF5; border-color: #10B981; }
+            .test-card { background: #EFF6FF; border-color: #3B82F6; }
+            .monitor-card { background: #FFFBEB; border-color: #F59E0B; }
+            .pause-card { background: #FEF2F2; border-color: #EF4444; }
+            .alert-card {
+                padding: 1rem;
+                border-radius: 8px;
+                margin-bottom: 0.5rem;
+                border-left: 4px solid;
+                background: #FEF2F2;
+                border-color: #EF4444;
+            }
+            .warning-card {
+                padding: 1rem;
+                border-radius: 8px;
+                margin-bottom: 0.5rem;
+                border-left: 4px solid;
+                background: #FFFBEB;
+                border-color: #F59E0B;
+            }
+            .info-card {
+                padding: 1rem;
+                border-radius: 8px;
+                margin-bottom: 0.5rem;
+                border-left: 4px solid;
+                background: #EFF6FF;
+                border-color: #3B82F6;
+            }
+            .trend-badge {
+                display: inline-block;
+                padding: 2px 8px;
+                border-radius: 12px;
+                font-size: 0.75rem;
+                font-weight: 600;
+            }
+            .trend-up { background: #D1FAE5; color: #065F46; }
+            .trend-down { background: #FEE2E2; color: #991B1B; }
+            .trend-stable { background: #F3F4F6; color: #374151; }
+            .stTabs [data-baseweb="tab-list"] { gap: 8px; }
+            .stTabs [data-baseweb="tab"] { padding: 10px 20px; border-radius: 8px; }
+            .metric-box {
+                background: #F8FAFC;
+                padding: 1rem;
+                border-radius: 8px;
+                text-align: center;
+            }
+        </style>
+        """
 
 
 # ============================================================================
@@ -530,6 +634,266 @@ def generate_recommendation(row, trends=None):
         return "Stable → Maintenir"
 
 
+def detect_alerts(df, trends=None):
+    """Détecte les alertes automatiques basées sur les seuils."""
+    alerts = []
+    
+    for _, row in df.iterrows():
+        nom = row['nom']
+        
+        # Alerte Frequency > 3
+        if row.get('frequency', 0) > 3:
+            alerts.append({
+                'type': 'danger',
+                'icon': '🔴',
+                'title': 'Frequency critique',
+                'creative': nom,
+                'message': f"Frequency à {row['frequency']:.2f} (seuil: 3.0)",
+                'action': 'Pauser ou réduire le budget immédiatement',
+                'priority': 1
+            })
+        elif row.get('frequency', 0) > 2.5:
+            alerts.append({
+                'type': 'warning',
+                'icon': '🟠',
+                'title': 'Frequency élevée',
+                'creative': nom,
+                'message': f"Frequency à {row['frequency']:.2f} (seuil warning: 2.5)",
+                'action': 'Surveiller de près, envisager de réduire',
+                'priority': 2
+            })
+        
+        # Alerte tendance < -20%
+        trend_score = row.get('trend_score', 0)
+        if trend_score < -30:
+            alerts.append({
+                'type': 'danger',
+                'icon': '🔴',
+                'title': 'Chute de performance',
+                'creative': nom,
+                'message': f"Tendance à {trend_score:.0f}% sur 7 jours",
+                'action': 'Pauser cette créative',
+                'priority': 1
+            })
+        elif trend_score < -20:
+            alerts.append({
+                'type': 'warning',
+                'icon': '🟠',
+                'title': 'Tendance négative',
+                'creative': nom,
+                'message': f"Tendance à {trend_score:.0f}% sur 7 jours",
+                'action': 'Surveiller et préparer une alternative',
+                'priority': 2
+            })
+    
+    # Trier par priorité
+    alerts.sort(key=lambda x: x['priority'])
+    return alerts
+
+
+def detect_anomalies(df, sparklines):
+    """Détecte les anomalies (variations brutales > 50% en 24h)."""
+    anomalies = []
+    
+    if not sparklines:
+        return anomalies
+    
+    for _, row in df.iterrows():
+        nom = row['nom']
+        
+        if nom not in sparklines or len(sparklines[nom]) < 2:
+            continue
+        
+        data = sparklines[nom]
+        
+        # Vérifier les 2 derniers jours
+        if len(data) >= 2:
+            yesterday = data[-2]
+            today = data[-1]
+            
+            # Anomalie CTR (chute > 50%)
+            if yesterday.get('ctr', 0) > 0 and today.get('ctr', 0) > 0:
+                ctr_change = ((today['ctr'] - yesterday['ctr']) / yesterday['ctr']) * 100
+                if ctr_change < -50:
+                    anomalies.append({
+                        'type': 'danger',
+                        'icon': '⚠️',
+                        'title': 'Chute CTR brutale',
+                        'creative': nom,
+                        'message': f"CTR: {yesterday['ctr']:.2f}% → {today['ctr']:.2f}% ({ctr_change:.0f}% en 24h)",
+                        'action': 'Vérifier si problème technique ou fatigue soudaine',
+                        'priority': 1
+                    })
+            
+            # Anomalie CPM (hausse > 50%)
+            if yesterday.get('cpm', 0) > 0 and today.get('cpm', 0) > 0:
+                cpm_change = ((today['cpm'] - yesterday['cpm']) / yesterday['cpm']) * 100
+                if cpm_change > 50:
+                    anomalies.append({
+                        'type': 'danger',
+                        'icon': '⚠️',
+                        'title': 'Explosion CPM',
+                        'creative': nom,
+                        'message': f"CPM: {yesterday['cpm']:.2f}€ → {today['cpm']:.2f}€ (+{cpm_change:.0f}% en 24h)",
+                        'action': 'Vérifier la concurrence ou problème de ciblage',
+                        'priority': 1
+                    })
+    
+    return anomalies
+
+
+def predict_fatigue(df, sparklines):
+    """Prédit dans combien de jours une créative sera fatiguée."""
+    predictions = []
+    
+    for _, row in df.iterrows():
+        nom = row['nom']
+        current_freq = row.get('frequency', 1)
+        
+        # Si déjà fatiguée
+        if current_freq >= 4:
+            predictions.append({
+                'creative': nom,
+                'format': row['format'],
+                'current_freq': current_freq,
+                'days_to_fatigue': 0,
+                'status': 'fatiguée',
+                'color': '🔴'
+            })
+            continue
+        
+        # Calculer le taux d'augmentation de frequency
+        if nom in sparklines and len(sparklines[nom]) >= 7:
+            data = sparklines[nom]
+            
+            # Estimer frequency par jour (impressions / reach approximatif)
+            impressions_recent = sum(d.get('impressions', 0) for d in data[-7:])
+            impressions_old = sum(d.get('impressions', 0) for d in data[:7]) if len(data) >= 14 else impressions_recent
+            
+            # Taux de croissance estimé de la frequency par jour
+            if impressions_old > 0 and impressions_recent > 0:
+                growth_rate = (impressions_recent / impressions_old - 1) / 7 * 0.1  # Approximation
+            else:
+                growth_rate = 0.05  # Valeur par défaut
+        else:
+            growth_rate = 0.05  # Valeur par défaut (5% par jour)
+        
+        # Calculer jours restants avant frequency = 4
+        if growth_rate > 0 and current_freq < 4:
+            days_to_fatigue = int((4 - current_freq) / (current_freq * growth_rate))
+            days_to_fatigue = max(1, min(days_to_fatigue, 60))  # Entre 1 et 60 jours
+        else:
+            days_to_fatigue = 30  # Par défaut
+        
+        if days_to_fatigue <= 3:
+            status = 'critique'
+            color = '🔴'
+        elif days_to_fatigue <= 7:
+            status = 'attention'
+            color = '🟠'
+        elif days_to_fatigue <= 14:
+            status = 'à surveiller'
+            color = '🟡'
+        else:
+            status = 'OK'
+            color = '🟢'
+        
+        predictions.append({
+            'creative': nom,
+            'format': row['format'],
+            'current_freq': current_freq,
+            'days_to_fatigue': days_to_fatigue,
+            'status': status,
+            'color': color
+        })
+    
+    # Trier par jours restants
+    predictions.sort(key=lambda x: x['days_to_fatigue'])
+    return predictions
+
+
+def calculate_diversification_score(df):
+    """Calcule le score de diversification et détecte les concentrations de budget."""
+    alerts = []
+    
+    total_budget = df['depense'].sum()
+    
+    if total_budget == 0:
+        return {'score': 100, 'alerts': [], 'by_usp': {}, 'by_hook': {}, 'by_format': {}}
+    
+    # Analyse par USP
+    usp_budget = df.groupby('usp')['depense'].sum()
+    usp_pct = (usp_budget / total_budget * 100).to_dict()
+    
+    for usp, pct in usp_pct.items():
+        if pct > 50:
+            alerts.append({
+                'type': 'danger',
+                'icon': '🎯',
+                'title': f'Concentration USP: {usp}',
+                'message': f'{pct:.0f}% du budget sur cette USP',
+                'action': 'Diversifier vers d\'autres USP pour réduire le risque',
+                'priority': 1
+            })
+        elif pct > 35:
+            alerts.append({
+                'type': 'warning',
+                'icon': '🎯',
+                'title': f'USP dominante: {usp}',
+                'message': f'{pct:.0f}% du budget sur cette USP',
+                'action': 'Envisager de tester d\'autres angles',
+                'priority': 2
+            })
+    
+    # Analyse par Hook
+    hook_budget = df.groupby('hook')['depense'].sum()
+    hook_pct = (hook_budget / total_budget * 100).to_dict()
+    
+    for hook, pct in hook_pct.items():
+        if pct > 50:
+            alerts.append({
+                'type': 'danger',
+                'icon': '🎣',
+                'title': f'Concentration Hook: {hook}',
+                'message': f'{pct:.0f}% du budget sur ce hook',
+                'action': 'Tester d\'autres types d\'accroches',
+                'priority': 1
+            })
+    
+    # Analyse par Format
+    format_budget = df.groupby('format')['depense'].sum()
+    format_pct = (format_budget / total_budget * 100).to_dict()
+    
+    for fmt, pct in format_pct.items():
+        if pct > 70:
+            alerts.append({
+                'type': 'warning',
+                'icon': '📐',
+                'title': f'Concentration Format: {fmt}',
+                'message': f'{pct:.0f}% du budget sur ce format',
+                'action': 'Tester d\'autres formats (vidéo, carousel, etc.)',
+                'priority': 2
+            })
+    
+    # Calculer score de diversification (100 = parfaitement diversifié)
+    # Plus il y a de concentration, plus le score est bas
+    max_usp_pct = max(usp_pct.values()) if usp_pct else 0
+    max_hook_pct = max(hook_pct.values()) if hook_pct else 0
+    max_format_pct = max(format_pct.values()) if format_pct else 0
+    
+    # Score: 100 si tout est à 25%, 0 si tout est à 100%
+    score = 100 - (max_usp_pct * 0.4 + max_hook_pct * 0.35 + max_format_pct * 0.25) * 0.7
+    score = max(0, min(100, score))
+    
+    return {
+        'score': round(score),
+        'alerts': alerts,
+        'by_usp': usp_pct,
+        'by_hook': hook_pct,
+        'by_format': format_pct
+    }
+
+
 def format_score_with_grade(score, variation=0):
     """Formate un score avec grade et variation pour affichage."""
     grade = get_grade(score)
@@ -585,6 +949,9 @@ def create_sparkline_plotly(sparkline_data, width=120, height=40):
 # ============================================================================
 
 def main():
+    # Appliquer le CSS selon le mode
+    st.markdown(get_css(st.session_state.dark_mode), unsafe_allow_html=True)
+    
     # Header
     st.markdown("""
     <div class="main-header">
@@ -595,7 +962,14 @@ def main():
     
     # Sidebar
     with st.sidebar:
-        st.header("📁 Import des données")
+        # Mode sombre en haut
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.header("📁 Import des données")
+        with col2:
+            if st.button("🌙" if not st.session_state.dark_mode else "☀️", help="Changer le thème"):
+                st.session_state.dark_mode = not st.session_state.dark_mode
+                st.rerun()
         
         import_mode = st.radio(
             "Mode d'import",
@@ -670,8 +1044,9 @@ def main():
         st.success("✅ Données quotidiennes chargées - Tendances et sparklines activées")
     
     # Tabs
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "🎯 Actions du jour",
+        "🚨 Alertes & Prédictions",
         "📊 Angles créatifs", 
         "📈 Tableau détaillé",
         "⚖️ Comparateur"
@@ -774,8 +1149,205 @@ def main():
             else:
                 st.success("✅ Aucune créative à pauser")
     
-    # ========== TAB 2: Angles créatifs ==========
+    # ========== TAB 2: Alertes & Prédictions ==========
     with tab2:
+        st.header("🚨 Alertes & Prédictions")
+        
+        # Générer toutes les alertes
+        alerts = detect_alerts(df, trends)
+        anomalies = detect_anomalies(df, sparklines) if has_daily else []
+        fatigue_predictions = predict_fatigue(df, sparklines) if has_daily else []
+        diversification = calculate_diversification_score(df)
+        
+        # Compteur d'alertes
+        total_alerts = len(alerts) + len(anomalies) + len(diversification['alerts'])
+        critical_alerts = len([a for a in alerts if a['type'] == 'danger']) + len([a for a in anomalies if a['type'] == 'danger'])
+        
+        # Métriques en haut
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("🚨 Alertes totales", total_alerts, delta=f"{critical_alerts} critiques" if critical_alerts > 0 else None, delta_color="inverse" if critical_alerts > 0 else "off")
+        with col2:
+            st.metric("⚠️ Anomalies 24h", len(anomalies))
+        with col3:
+            fatigued_soon = len([p for p in fatigue_predictions if p['days_to_fatigue'] <= 7])
+            st.metric("😴 Fatigue < 7j", fatigued_soon)
+        with col4:
+            div_color = "normal" if diversification['score'] >= 60 else "inverse"
+            st.metric("🎯 Diversification", f"{diversification['score']}/100", delta="OK" if diversification['score'] >= 60 else "À améliorer", delta_color=div_color)
+        
+        st.divider()
+        
+        # Sous-onglets pour chaque type d'alerte
+        alert_tab1, alert_tab2, alert_tab3, alert_tab4 = st.tabs([
+            f"🔔 Alertes ({len(alerts)})",
+            f"⚠️ Anomalies ({len(anomalies)})",
+            f"😴 Prédiction fatigue ({len(fatigue_predictions)})",
+            f"🎯 Diversification"
+        ])
+        
+        # --- Alertes automatiques ---
+        with alert_tab1:
+            st.subheader("🔔 Alertes automatiques")
+            st.caption("Créatives dépassant les seuils critiques (frequency > 3, tendance < -20%)")
+            
+            if alerts:
+                for alert in alerts:
+                    card_class = "alert-card" if alert['type'] == 'danger' else "warning-card"
+                    st.markdown(f"""
+                    <div class="{card_class}">
+                        <strong>{alert['icon']} {alert['title']}</strong><br>
+                        <small>📌 {alert['creative'][:60]}...</small><br>
+                        <small>{alert['message']}</small><br>
+                        <small>💡 <em>{alert['action']}</em></small>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.success("✅ Aucune alerte ! Toutes les créatives sont dans les seuils normaux.")
+        
+        # --- Anomalies ---
+        with alert_tab2:
+            st.subheader("⚠️ Anomalies détectées (24h)")
+            st.caption("Variations brutales > 50% en 24h (CTR en chute ou CPM en hausse)")
+            
+            if not has_daily:
+                st.warning("⚠️ Chargez les données quotidiennes pour détecter les anomalies.")
+            elif anomalies:
+                for anomaly in anomalies:
+                    st.markdown(f"""
+                    <div class="alert-card">
+                        <strong>{anomaly['icon']} {anomaly['title']}</strong><br>
+                        <small>📌 {anomaly['creative'][:60]}...</small><br>
+                        <small>{anomaly['message']}</small><br>
+                        <small>💡 <em>{anomaly['action']}</em></small>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.success("✅ Aucune anomalie détectée dans les dernières 24h.")
+        
+        # --- Prédiction fatigue ---
+        with alert_tab3:
+            st.subheader("😴 Prédiction de fatigue créative")
+            st.caption("Estimation du nombre de jours avant que la frequency atteigne le seuil critique (4.0)")
+            
+            if not has_daily:
+                st.warning("⚠️ Chargez les données quotidiennes pour les prédictions de fatigue.")
+            elif fatigue_predictions:
+                # Tableau des prédictions
+                fatigue_df = pd.DataFrame(fatigue_predictions)
+                
+                # Formater pour affichage
+                fatigue_df['Statut'] = fatigue_df.apply(lambda r: f"{r['color']} {r['status'].capitalize()}", axis=1)
+                fatigue_df['Freq. actuelle'] = fatigue_df['current_freq'].apply(lambda x: f"{x:.2f}")
+                fatigue_df['Jours restants'] = fatigue_df['days_to_fatigue'].apply(
+                    lambda x: "⚠️ Déjà fatiguée" if x == 0 else f"{x} jours"
+                )
+                fatigue_df['Créative'] = fatigue_df['creative'].str[:50] + '...'
+                
+                st.dataframe(
+                    fatigue_df[['format', 'Créative', 'Freq. actuelle', 'Jours restants', 'Statut']],
+                    use_container_width=True,
+                    height=min(600, 40 + len(fatigue_df) * 35),
+                    column_config={
+                        "format": st.column_config.TextColumn("Format", width=60),
+                        "Créative": st.column_config.TextColumn("Créative", width=300),
+                        "Freq. actuelle": st.column_config.TextColumn("Frequency", width=90),
+                        "Jours restants": st.column_config.TextColumn("Jours avant fatigue", width=130),
+                        "Statut": st.column_config.TextColumn("Statut", width=100),
+                    },
+                    hide_index=True
+                )
+                
+                # Alertes pour créatives en danger
+                critical_fatigue = [p for p in fatigue_predictions if p['days_to_fatigue'] <= 3 and p['days_to_fatigue'] > 0]
+                if critical_fatigue:
+                    st.warning(f"⚠️ {len(critical_fatigue)} créative(s) seront fatiguées dans moins de 3 jours !")
+                    for p in critical_fatigue:
+                        st.markdown(f"- **{p['format']}** | {p['creative'][:40]}... → {p['days_to_fatigue']} jour(s)")
+            else:
+                st.info("Aucune prédiction disponible.")
+        
+        # --- Diversification ---
+        with alert_tab4:
+            st.subheader("🎯 Score de diversification")
+            st.caption("Analyse de la répartition du budget entre les différents angles créatifs")
+            
+            col1, col2 = st.columns([1, 2])
+            
+            with col1:
+                # Score de diversification
+                score = diversification['score']
+                if score >= 70:
+                    score_color = "🟢"
+                    score_status = "Excellent"
+                elif score >= 50:
+                    score_color = "🟡"
+                    score_status = "Acceptable"
+                else:
+                    score_color = "🔴"
+                    score_status = "À améliorer"
+                
+                st.metric("Score global", f"{score}/100", delta=score_status, delta_color="normal" if score >= 50 else "inverse")
+                
+                st.markdown(f"""
+                **Interprétation:**
+                - 🟢 70-100 : Excellente diversification
+                - 🟡 50-69 : Diversification acceptable
+                - 🔴 0-49 : Trop de concentration, risque élevé
+                """)
+            
+            with col2:
+                # Graphiques de répartition
+                if diversification['by_usp']:
+                    fig_usp = px.pie(
+                        values=list(diversification['by_usp'].values()),
+                        names=list(diversification['by_usp'].keys()),
+                        title="Répartition budget par USP",
+                        hole=0.4
+                    )
+                    fig_usp.update_layout(height=250, margin=dict(t=40, b=0, l=0, r=0))
+                    st.plotly_chart(fig_usp, use_container_width=True)
+            
+            # Alertes de concentration
+            if diversification['alerts']:
+                st.markdown("### ⚠️ Alertes de concentration")
+                for alert in diversification['alerts']:
+                    card_class = "alert-card" if alert['type'] == 'danger' else "warning-card"
+                    st.markdown(f"""
+                    <div class="{card_class}">
+                        <strong>{alert['icon']} {alert['title']}</strong><br>
+                        <small>{alert['message']}</small><br>
+                        <small>💡 <em>{alert['action']}</em></small>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.success("✅ Bonne diversification ! Aucune concentration excessive détectée.")
+            
+            # Détails par dimension
+            st.markdown("### 📊 Détails par dimension")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.markdown("**Par USP**")
+                for usp, pct in sorted(diversification['by_usp'].items(), key=lambda x: -x[1]):
+                    bar_color = "🟢" if pct < 35 else "🟡" if pct < 50 else "🔴"
+                    st.markdown(f"{bar_color} {usp}: **{pct:.0f}%**")
+            
+            with col2:
+                st.markdown("**Par Hook**")
+                for hook, pct in sorted(diversification['by_hook'].items(), key=lambda x: -x[1]):
+                    bar_color = "🟢" if pct < 35 else "🟡" if pct < 50 else "🔴"
+                    st.markdown(f"{bar_color} {hook}: **{pct:.0f}%**")
+            
+            with col3:
+                st.markdown("**Par Format**")
+                for fmt, pct in sorted(diversification['by_format'].items(), key=lambda x: -x[1]):
+                    bar_color = "🟢" if pct < 50 else "🟡" if pct < 70 else "🔴"
+                    st.markdown(f"{bar_color} {fmt}: **{pct:.0f}%**")
+    
+    # ========== TAB 3: Angles créatifs ==========
+    with tab3:
         st.header("Analyse par angle créatif")
         
         col1, col2 = st.columns(2)
@@ -812,8 +1384,8 @@ def main():
         with col3:
             st.success(f"**Combo:** {best_usp} + {best_hook}")
     
-    # ========== TAB 3: Tableau détaillé ==========
-    with tab3:
+    # ========== TAB 4: Tableau détaillé ==========
+    with tab4:
         st.header("Tableau détaillé")
         
         # Barre de recherche
@@ -1479,8 +2051,8 @@ def main():
             mime='text/csv'
         )
     
-    # ========== TAB 4: Comparateur ==========
-    with tab4:
+    # ========== TAB 5: Comparateur ==========
+    with tab5:
         st.header("Comparateur")
         
         options = df['nom'].tolist()
