@@ -875,8 +875,8 @@ def main():
         action_icons = {'scale': '🚀 Scale', 'test': '⚡ Test', 'monitor': '👁️ Monitor', 'pause': '⏸️ Pause'}
         display_df['Action'] = display_df['action'].map(action_icons)
         
-        # Tronquer le nom
-        display_df['Nom'] = display_df['nom'].str[:40] + '...'
+        # Nom complet (sans troncature)
+        display_df['Nom'] = display_df['nom']
         
         # Sélectionner les colonnes à afficher
         columns_to_show = ['format', 'Nom', '📈 Tendance', '💰 Profit', '🚀 Trafic', '👁️ Notoriété', '⭐ Global', 'scale_potential', 'Action']
@@ -888,23 +888,23 @@ def main():
         st.dataframe(
             final_df,
             use_container_width=True,
-            height=500,
+            height=600,
             column_config={
-                "Format": st.column_config.TextColumn("Format", width="small"),
-                "Nom": st.column_config.TextColumn("Nom", width="large"),
-                "Tendance": st.column_config.TextColumn("Tendance", width="small"),
-                "Profit": st.column_config.TextColumn("💰 Profit", width="medium"),
-                "Trafic": st.column_config.TextColumn("🚀 Trafic", width="medium"),
-                "Notoriété": st.column_config.TextColumn("👁️ Notoriété", width="medium"),
-                "Global": st.column_config.TextColumn("⭐ Global", width="medium"),
+                "Format": st.column_config.TextColumn("Format", width=70),
+                "Nom": st.column_config.TextColumn("Nom", width=350),
+                "Tendance": st.column_config.TextColumn("Tendance", width=80),
+                "Profit": st.column_config.TextColumn("💰 Profit", width=100),
+                "Trafic": st.column_config.TextColumn("🚀 Trafic", width=100),
+                "Notoriété": st.column_config.TextColumn("👁️ Notoriété", width=100),
+                "Global": st.column_config.TextColumn("⭐ Global", width=100),
                 "Potentiel": st.column_config.ProgressColumn(
                     "Potentiel",
                     format="%d",
                     min_value=0,
                     max_value=100,
-                    width="medium"
+                    width=90
                 ),
-                "Action": st.column_config.TextColumn("Action", width="small"),
+                "Action": st.column_config.TextColumn("Action", width=90),
             },
             hide_index=True
         )
