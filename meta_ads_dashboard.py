@@ -506,10 +506,14 @@ def calculate_scores(df, trends=None):
         z = (value - mean) / std
         return -z if inverse else z
     
+    # Calculer le CPMu (Cost Per Mille Unique)
+    df['cpmu'] = np.where(df['reach'] > 0, (df['depense'] / df['reach']) * 1000, 0)
+    
     roas_mean, roas_std = calc_stats(df['roas'])
     ctr_mean, ctr_std = calc_stats(df['ctr_lien'])
     cpc_mean, cpc_std = calc_stats(df['cpc_lien'])
     cpm_mean, cpm_std = calc_stats(df['cpm'])
+    cpmu_mean, cpmu_std = calc_stats(df['cpmu'])
     reach_mean, reach_std = calc_stats(df['reach'])
     clics_mean, clics_std = calc_stats(df['clics_lien'])
     
@@ -529,6 +533,7 @@ def calculate_scores(df, trends=None):
         z_ctr = z_score(row['ctr_lien'], ctr_mean, ctr_std)
         z_cpc = z_score(row['cpc_lien'], cpc_mean, cpc_std, inverse=True)
         z_cpm = z_score(row['cpm'], cpm_mean, cpm_std, inverse=True)
+        z_cpmu = z_score(row['cpmu'], cpmu_mean, cpmu_std, inverse=True)
         z_reach = z_score(row['reach'], reach_mean, reach_std)
         z_clics = z_score(row['clics_lien'], clics_mean, clics_std)
         
@@ -537,7 +542,8 @@ def calculate_scores(df, trends=None):
         
         score_profit = round(z_to_100(0.45 * z_roas + 0.35 * z_cpa + 0.20 * z_cvr))
         score_trafic = round(z_to_100(0.50 * z_ctr + 0.30 * z_cpc + 0.20 * z_clics))
-        score_notoriete = round(z_to_100(0.40 * z_cpm + 0.60 * z_reach))
+        # Nouveau calcul: CPMu inversé (50%) + Couverture (50%)
+        score_notoriete = round(z_to_100(0.50 * z_cpmu + 0.50 * z_reach))
         score_global = round((score_profit + score_trafic + score_notoriete) / 3)
         
         coef_conf = calculate_confidence(row)
@@ -638,6 +644,10 @@ def detect_alerts(df, trends=None):
     """Détecte les alertes automatiques basées sur les seuils."""
     alerts = []
     
+    # Calculer les seuils pour CPMu
+    cpmu_mean = df['cpmu'].mean() if 'cpmu' in df.columns else 0
+    cpmu_q75 = df['cpmu'].quantile(0.75) if 'cpmu' in df.columns else 0
+    
     for _, row in df.iterrows():
         nom = row['nom']
         
@@ -662,6 +672,30 @@ def detect_alerts(df, trends=None):
                 'action': 'Surveiller de près, envisager de réduire',
                 'priority': 2
             })
+        
+        # Alerte CPMu explosif (> 2x la moyenne ou > 150% du Q75)
+        cpmu = row.get('cpmu', 0)
+        if cpmu_mean > 0 and cpmu > 0:
+            if cpmu > cpmu_mean * 2.5:
+                alerts.append({
+                    'type': 'danger',
+                    'icon': '🔴',
+                    'title': 'CPMu explosif',
+                    'creative': nom,
+                    'message': f"CPMu à {cpmu:.2f}€ (moyenne: {cpmu_mean:.2f}€, +{((cpmu/cpmu_mean)-1)*100:.0f}%)",
+                    'action': 'Audience saturée - Pauser ou changer de ciblage',
+                    'priority': 1
+                })
+            elif cpmu > cpmu_mean * 1.8:
+                alerts.append({
+                    'type': 'warning',
+                    'icon': '🟠',
+                    'title': 'CPMu élevé',
+                    'creative': nom,
+                    'message': f"CPMu à {cpmu:.2f}€ (moyenne: {cpmu_mean:.2f}€, +{((cpmu/cpmu_mean)-1)*100:.0f}%)",
+                    'action': 'Surveiller - Risque de saturation audience',
+                    'priority': 2
+                })
         
         # Alerte tendance < -20%
         trend_score = row.get('trend_score', 0)
@@ -1531,7 +1565,7 @@ def main():
             with col1:
                 show_scores = st.checkbox("Scores (Profit, Trafic, Notoriété, Global)", value=True)
             with col2:
-                show_metrics = st.checkbox("Métriques (ROAS, CTR, Dépense, Frequency)", value=True)
+                show_metrics = st.checkbox("Métriques (ROAS, CTR, CPMu, Dépense, Frequency)", value=True)
             with col3:
                 show_confiance = st.checkbox("Confiance", value=False)
         
@@ -1605,6 +1639,11 @@ def main():
         display_df['Frequency'] = display_df['frequency'].apply(
             lambda x: f"{'🔴' if x > 3 else '🟡' if x > 2 else '🟢'} {x:.2f}"
         )
+        # CPMu avec couleur (plus bas = meilleur)
+        cpmu_mean = filtered_df['cpmu'].mean() if 'cpmu' in filtered_df.columns else 0
+        display_df['CPMu €'] = display_df['cpmu'].apply(
+            lambda x: f"{'🟢' if x < cpmu_mean * 0.8 else '🟡' if x < cpmu_mean * 1.5 else '🔴'} {x:.2f}€" if x > 0 else "-"
+        )
         display_df['Confiance'] = display_df['coefficient_confiance'].apply(
             lambda x: f"{'🟢' if x >= 0.7 else '🟡' if x >= 0.5 else '🔴'} {x*100:.0f}%"
         )
@@ -1625,7 +1664,7 @@ def main():
             columns_to_show.extend(['💰 Profit', '🚀 Trafic', '👁️ Notoriété', '⭐ Global'])
         
         if show_metrics:
-            columns_to_show.extend(['ROAS', 'CTR %', 'Dépense €', 'Frequency'])
+            columns_to_show.extend(['ROAS', 'CTR %', 'CPMu €', 'Dépense €', 'Frequency'])
         
         if show_confiance:
             columns_to_show.append('Confiance')
@@ -1641,25 +1680,26 @@ def main():
         # Configuration des colonnes pour st.dataframe
         column_config = {
             "Format": st.column_config.TextColumn("Format", width=70),
-            "Nom": st.column_config.TextColumn("Nom", width=320),
-            "📈 Tendance": st.column_config.TextColumn("Tendance", width=90),
-            "💰 Profit": st.column_config.TextColumn("Profit", width=110),
-            "🚀 Trafic": st.column_config.TextColumn("Trafic", width=110),
-            "👁️ Notoriété": st.column_config.TextColumn("Notoriété", width=110),
-            "⭐ Global": st.column_config.TextColumn("Global", width=110),
-            "ROAS": st.column_config.TextColumn("ROAS", width=70),
-            "CTR %": st.column_config.TextColumn("CTR", width=70),
-            "Dépense €": st.column_config.TextColumn("Dépense", width=80),
-            "Frequency": st.column_config.TextColumn("Freq.", width=80),
-            "Confiance": st.column_config.TextColumn("Conf.", width=80),
+            "Nom": st.column_config.TextColumn("Nom", width=300),
+            "📈 Tendance": st.column_config.TextColumn("Tendance", width=85),
+            "💰 Profit": st.column_config.TextColumn("Profit", width=100),
+            "🚀 Trafic": st.column_config.TextColumn("Trafic", width=100),
+            "👁️ Notoriété": st.column_config.TextColumn("Notoriété", width=100),
+            "⭐ Global": st.column_config.TextColumn("Global", width=100),
+            "ROAS": st.column_config.TextColumn("ROAS", width=65),
+            "CTR %": st.column_config.TextColumn("CTR", width=65),
+            "CPMu €": st.column_config.TextColumn("CPMu", width=80),
+            "Dépense €": st.column_config.TextColumn("Dépense", width=75),
+            "Frequency": st.column_config.TextColumn("Freq.", width=75),
+            "Confiance": st.column_config.TextColumn("Conf.", width=75),
             "Potentiel": st.column_config.ProgressColumn(
                 "Potentiel",
                 format="%d",
                 min_value=0,
                 max_value=100,
-                width=100
+                width=90
             ),
-            "Action": st.column_config.TextColumn("Action", width=100),
+            "Action": st.column_config.TextColumn("Action", width=90),
         }
         
         # Fonction pour colorer les lignes selon l'action
@@ -1870,15 +1910,21 @@ def main():
         # ===== TABLEAU NOTORIÉTÉ =====
         with tab_notoriete:
             st.markdown("""
-            **Composition du score Notoriété :** CPM inversé (40%) + Couverture (60%)
+            **Composition du score Notoriété :** CPMu inversé (50%) + Couverture (50%)
             
-            *Plus la couverture est élevée, meilleur est le score. Plus le CPM est bas, meilleur est le score.*
+            *CPMu = Coût pour 1000 personnes uniques. Plus la couverture est élevée et le CPMu bas, meilleur est le score.*
             """)
             
-            notoriete_df = filtered_df[['nom', 'format', 'cpm', 'reach', 'impressions', 'frequency', 'score_notoriete', 'action']].copy()
+            # Calculer les quartiles pour CPMu
+            cpmu_q25, cpmu_q50, cpmu_q75 = filtered_df[filtered_df['cpmu'] > 0]['cpmu'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cpmu'] > 0]) > 0 else (2, 5, 10)
+            
+            notoriete_df = filtered_df[['nom', 'format', 'cpmu', 'cpm', 'reach', 'impressions', 'frequency', 'score_notoriete', 'action']].copy()
             
             # Formater les colonnes
             notoriete_df['Nom'] = notoriete_df['nom']
+            notoriete_df['CPMu €'] = notoriete_df['cpmu'].apply(
+                lambda x: format_metric_color(x, (cpmu_q25, cpmu_q50, cpmu_q75), inverse=True, suffix="€", decimals=2)
+            )
             notoriete_df['CPM €'] = notoriete_df['cpm'].apply(
                 lambda x: format_metric_color(x, (cpm_q25, cpm_q50, cpm_q75), inverse=True, suffix="€", decimals=2)
             )
@@ -1899,16 +1945,17 @@ def main():
             
             # Afficher
             st.dataframe(
-                notoriete_df[['format', 'Nom', 'CPM €', 'Couverture', 'Impressions', 'Frequency', 'Score', 'Act.']],
+                notoriete_df[['format', 'Nom', 'CPMu €', 'CPM €', 'Couverture', 'Impressions', 'Frequency', 'Score', 'Act.']],
                 use_container_width=True,
                 height=table_height,
                 column_config={
                     "format": st.column_config.TextColumn("Format", width=60),
-                    "Nom": st.column_config.TextColumn("Nom", width=350),
-                    "CPM €": st.column_config.TextColumn("CPM", width=90),
-                    "Couverture": st.column_config.TextColumn("Couverture", width=100),
-                    "Impressions": st.column_config.TextColumn("Impr.", width=90),
-                    "Frequency": st.column_config.TextColumn("Freq.", width=80),
+                    "Nom": st.column_config.TextColumn("Nom", width=300),
+                    "CPMu €": st.column_config.TextColumn("CPMu (50%)", width=100),
+                    "CPM €": st.column_config.TextColumn("CPM", width=85),
+                    "Couverture": st.column_config.TextColumn("Couverture (50%)", width=120),
+                    "Impressions": st.column_config.TextColumn("Impr.", width=80),
+                    "Frequency": st.column_config.TextColumn("Freq.", width=75),
                     "Score": st.column_config.TextColumn("Score", width=100),
                     "Act.": st.column_config.TextColumn("", width=40),
                 },
@@ -1916,7 +1963,7 @@ def main():
             )
             
             # Légende
-            st.caption("🟢 Excellent (top 25%) | 🟡 Bon (médiane) | 🟠 Moyen (bottom 25%) | 🔴 Faible | *CPM : plus bas = meilleur* | *Frequency : <2 🟢, 2-3 🟡, >3 🔴*")
+            st.caption("🟢 Excellent (top 25%) | 🟡 Bon (médiane) | 🟠 Moyen (bottom 25%) | 🔴 Faible | *CPMu/CPM : plus bas = meilleur* | *Frequency : <2 🟢, 2-3 🟡, >3 🔴*")
         
         # ===== TABLEAU TENDANCE =====
         with tab_tendance:
