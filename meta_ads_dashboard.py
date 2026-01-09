@@ -1119,7 +1119,9 @@ def main():
                             if previous > 0:
                                 variation = ((recent - previous) / previous) * 100
                                 with var_cols[i]:
-                                    delta_color = "normal" if (metric_label in ['CTR (%)', 'Impressions'] and variation > 0) or (metric_label in ['CPM (€)', 'Dépense (€)'] and variation < 0) else "inverse"
+                                    # CTR et Impressions : hausse = vert, baisse = rouge
+                                    # CPM et Dépense : hausse = rouge, baisse = vert
+                                    delta_color = "normal" if metric_label in ['CTR (%)', 'Impressions'] else "inverse"
                                     st.metric(
                                         metric_label,
                                         f"{recent:.2f}" if metric_key != 'impressions' else f"{recent:,.0f}",
