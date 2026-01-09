@@ -948,18 +948,124 @@ def main():
                 st.write(f"Global: {row['score_global']} ({get_grade(row['score_global'])})")
                 st.write(f"**Potentiel: {row['scale_potential']}**")
             
-            # Sparkline si disponible
+            # Graphique d'évolution multi-métriques
             if has_daily and selected_creative in sparklines:
-                st.markdown("**📈 Évolution CTR (14 jours)**")
-                result = create_sparkline_plotly(sparklines[selected_creative], width=400, height=100)
-                if result:
-                    fig, trend = result
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        st.plotly_chart(fig, use_container_width=True)
-                    with col2:
-                        trend_color = "green" if trend > 10 else "red" if trend < -10 else "gray"
-                        st.metric("Tendance 7j", f"{trend:+.0f}%")
+                st.markdown("---")
+                st.markdown("**📈 Évolution des métriques (14 jours)**")
+                
+                # Sélection des métriques à afficher
+                available_metrics = {
+                    'CTR (%)': 'ctr',
+                    'CPM (€)': 'cpm',
+                    'Impressions': 'impressions',
+                    'Dépense (€)': 'depense'
+                }
+                
+                selected_metrics = st.multiselect(
+                    "Sélectionner les métriques à afficher",
+                    options=list(available_metrics.keys()),
+                    default=['CTR (%)'],
+                    help="Vous pouvez sélectionner plusieurs métriques pour les comparer"
+                )
+                
+                if selected_metrics:
+                    sparkline_data = sparklines[selected_creative]
+                    
+                    # Créer le graphique
+                    fig = go.Figure()
+                    
+                    # Couleurs pour chaque métrique
+                    colors = {
+                        'CTR (%)': '#10B981',
+                        'CPM (€)': '#F59E0B', 
+                        'Impressions': '#3B82F6',
+                        'Dépense (€)': '#8B5CF6'
+                    }
+                    
+                    # Vérifier si on a besoin d'un axe secondaire (échelles très différentes)
+                    use_secondary = len(selected_metrics) > 1 and 'Impressions' in selected_metrics
+                    
+                    for metric_label in selected_metrics:
+                        metric_key = available_metrics[metric_label]
+                        values = [d.get(metric_key, 0) for d in sparkline_data]
+                        dates = [d.get('date', '') for d in sparkline_data]
+                        
+                        # Utiliser axe secondaire pour Impressions si autres métriques sélectionnées
+                        use_y2 = use_secondary and metric_label == 'Impressions'
+                        
+                        fig.add_trace(go.Scatter(
+                            x=dates,
+                            y=values,
+                            mode='lines+markers',
+                            name=metric_label,
+                            line=dict(color=colors.get(metric_label, '#6B7280'), width=2),
+                            marker=dict(size=6),
+                            yaxis='y2' if use_y2 else 'y'
+                        ))
+                    
+                    # Configuration du layout
+                    layout_config = dict(
+                        height=400,
+                        xaxis=dict(
+                            title="Date",
+                            tickangle=45,
+                            showgrid=True,
+                            gridcolor='rgba(0,0,0,0.1)'
+                        ),
+                        yaxis=dict(
+                            title=selected_metrics[0] if len(selected_metrics) == 1 else "Valeur",
+                            showgrid=True,
+                            gridcolor='rgba(0,0,0,0.1)'
+                        ),
+                        legend=dict(
+                            orientation="h",
+                            yanchor="bottom",
+                            y=1.02,
+                            xanchor="left",
+                            x=0
+                        ),
+                        hovermode='x unified',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgba(0,0,0,0)'
+                    )
+                    
+                    # Ajouter axe Y secondaire si nécessaire
+                    if use_secondary:
+                        layout_config['yaxis2'] = dict(
+                            title="Impressions",
+                            overlaying='y',
+                            side='right',
+                            showgrid=False
+                        )
+                    
+                    fig.update_layout(**layout_config)
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Afficher les variations
+                    st.markdown("**📊 Variations 7j vs 7j précédents**")
+                    var_cols = st.columns(len(selected_metrics))
+                    
+                    for i, metric_label in enumerate(selected_metrics):
+                        metric_key = available_metrics[metric_label]
+                        values = [d.get(metric_key, 0) for d in sparkline_data]
+                        
+                        if len(values) >= 8:
+                            recent = np.mean([v for v in values[-7:] if v > 0]) if any(v > 0 for v in values[-7:]) else 0
+                            previous = np.mean([v for v in values[:7] if v > 0]) if any(v > 0 for v in values[:7]) else 0
+                            
+                            if previous > 0:
+                                variation = ((recent - previous) / previous) * 100
+                                with var_cols[i]:
+                                    delta_color = "normal" if (metric_label in ['CTR (%)', 'Impressions'] and variation > 0) or (metric_label in ['CPM (€)', 'Dépense (€)'] and variation < 0) else "inverse"
+                                    st.metric(
+                                        metric_label,
+                                        f"{recent:.2f}" if metric_key != 'impressions' else f"{recent:,.0f}",
+                                        f"{variation:+.1f}%",
+                                        delta_color=delta_color
+                                    )
+                else:
+                    st.info("👆 Sélectionnez au moins une métrique pour voir le graphique")
             
             st.info(f"**Recommandation:** {row['recommendation']}")
         
