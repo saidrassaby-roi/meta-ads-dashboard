@@ -1021,6 +1021,218 @@ def main():
         
         st.divider()
         
+        # ===== TABLEAUX DÉTAILLÉS PAR SCORE =====
+        st.subheader("📊 Détail des scores par dimension")
+        
+        # Fonctions de formatage avec couleurs
+        def format_metric_color(value, thresholds, inverse=False, suffix="", decimals=2):
+            """Formate une métrique avec couleur selon seuils. inverse=True si une valeur basse est meilleure."""
+            if pd.isna(value) or value == 0:
+                return "⚪ -"
+            
+            low, mid, high = thresholds
+            
+            if inverse:
+                if value <= low:
+                    color = "🟢"
+                elif value <= mid:
+                    color = "🟡"
+                elif value <= high:
+                    color = "🟠"
+                else:
+                    color = "🔴"
+            else:
+                if value >= high:
+                    color = "🟢"
+                elif value >= mid:
+                    color = "🟡"
+                elif value >= low:
+                    color = "🟠"
+                else:
+                    color = "🔴"
+            
+            if decimals == 0:
+                return f"{color} {value:,.0f}{suffix}"
+            else:
+                return f"{color} {value:.{decimals}f}{suffix}"
+        
+        def format_score_color(score):
+            """Formate un score avec couleur et grade."""
+            grade = get_grade(score)
+            if score >= 70:
+                return f"🟢 {score} ({grade})"
+            elif score >= 60:
+                return f"🟢 {score} ({grade})"
+            elif score >= 50:
+                return f"🟡 {score} ({grade})"
+            elif score >= 40:
+                return f"🟠 {score} ({grade})"
+            else:
+                return f"🔴 {score} ({grade})"
+        
+        # Calculer les statistiques pour les seuils dynamiques
+        roas_q25, roas_q50, roas_q75 = filtered_df['roas'].quantile([0.25, 0.5, 0.75])
+        cpa_q25, cpa_q50, cpa_q75 = filtered_df[filtered_df['cpa_calc'] > 0]['cpa_calc'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cpa_calc'] > 0]) > 0 else (10, 20, 40)
+        cvr_q25, cvr_q50, cvr_q75 = filtered_df[filtered_df['cvr'] > 0]['cvr'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cvr'] > 0]) > 0 else (1, 2, 5)
+        
+        ctr_q25, ctr_q50, ctr_q75 = filtered_df['ctr_lien'].quantile([0.25, 0.5, 0.75])
+        cpc_q25, cpc_q50, cpc_q75 = filtered_df[filtered_df['cpc_lien'] > 0]['cpc_lien'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cpc_lien'] > 0]) > 0 else (0.2, 0.5, 1)
+        clics_q25, clics_q50, clics_q75 = filtered_df['clics_lien'].quantile([0.25, 0.5, 0.75])
+        
+        cpm_q25, cpm_q50, cpm_q75 = filtered_df[filtered_df['cpm'] > 0]['cpm'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cpm'] > 0]) > 0 else (2, 5, 10)
+        reach_q25, reach_q50, reach_q75 = filtered_df['reach'].quantile([0.25, 0.5, 0.75])
+        
+        # Onglets pour les 3 tableaux
+        tab_profit, tab_trafic, tab_notoriete = st.tabs(["💰 Score Profit", "🚀 Score Trafic", "👁️ Score Notoriété"])
+        
+        # ===== TABLEAU PROFIT =====
+        with tab_profit:
+            st.markdown("""
+            **Composition du score Profit :** ROAS (45%) + CPA inversé (35%) + CVR (20%)
+            
+            *Plus le ROAS et le CVR sont élevés, meilleur est le score. Plus le CPA est bas, meilleur est le score.*
+            """)
+            
+            profit_df = filtered_df[['nom', 'format', 'roas', 'cpa_calc', 'cvr', 'achats', 'depense', 'score_profitabilite', 'action']].copy()
+            
+            # Formater les colonnes
+            profit_df['Nom'] = profit_df['nom'].str[:60]
+            profit_df['ROAS'] = profit_df['roas'].apply(
+                lambda x: format_metric_color(x, (roas_q25, roas_q50, roas_q75), inverse=False, decimals=2)
+            )
+            profit_df['CPA €'] = profit_df['cpa_calc'].apply(
+                lambda x: format_metric_color(x, (cpa_q25, cpa_q50, cpa_q75), inverse=True, suffix="€", decimals=2)
+            )
+            profit_df['CVR %'] = profit_df['cvr'].apply(
+                lambda x: format_metric_color(x, (cvr_q25, cvr_q50, cvr_q75), inverse=False, suffix="%", decimals=2)
+            )
+            profit_df['Achats'] = profit_df['achats'].apply(lambda x: f"{x:,.0f}")
+            profit_df['Dépense €'] = profit_df['depense'].apply(lambda x: f"{x:.2f}€")
+            profit_df['Score'] = profit_df['score_profitabilite'].apply(format_score_color)
+            
+            action_format = {'scale': '🚀', 'test': '⚡', 'monitor': '👁️', 'pause': '⏸️'}
+            profit_df['Act.'] = profit_df['action'].map(action_format)
+            
+            # Afficher
+            st.dataframe(
+                profit_df[['format', 'Nom', 'ROAS', 'CPA €', 'CVR %', 'Achats', 'Dépense €', 'Score', 'Act.']],
+                use_container_width=True,
+                height=400,
+                column_config={
+                    "format": st.column_config.TextColumn("Format", width=60),
+                    "Nom": st.column_config.TextColumn("Nom", width=280),
+                    "ROAS": st.column_config.TextColumn("ROAS", width=80),
+                    "CPA €": st.column_config.TextColumn("CPA", width=90),
+                    "CVR %": st.column_config.TextColumn("CVR", width=90),
+                    "Achats": st.column_config.TextColumn("Achats", width=70),
+                    "Dépense €": st.column_config.TextColumn("Dépense", width=80),
+                    "Score": st.column_config.TextColumn("Score", width=100),
+                    "Act.": st.column_config.TextColumn("", width=40),
+                },
+                hide_index=True
+            )
+            
+            # Légende
+            st.caption("🟢 Excellent (top 25%) | 🟡 Bon (médiane) | 🟠 Moyen (bottom 25%) | 🔴 Faible | *CPA : plus bas = meilleur*")
+        
+        # ===== TABLEAU TRAFIC =====
+        with tab_trafic:
+            st.markdown("""
+            **Composition du score Trafic :** CTR (50%) + CPC inversé (30%) + Clics (20%)
+            
+            *Plus le CTR et les clics sont élevés, meilleur est le score. Plus le CPC est bas, meilleur est le score.*
+            """)
+            
+            trafic_df = filtered_df[['nom', 'format', 'ctr_lien', 'cpc_lien', 'clics_lien', 'impressions', 'score_trafic', 'action']].copy()
+            
+            # Formater les colonnes
+            trafic_df['Nom'] = trafic_df['nom'].str[:60]
+            trafic_df['CTR %'] = trafic_df['ctr_lien'].apply(
+                lambda x: format_metric_color(x, (ctr_q25, ctr_q50, ctr_q75), inverse=False, suffix="%", decimals=2)
+            )
+            trafic_df['CPC €'] = trafic_df['cpc_lien'].apply(
+                lambda x: format_metric_color(x, (cpc_q25, cpc_q50, cpc_q75), inverse=True, suffix="€", decimals=2)
+            )
+            trafic_df['Clics'] = trafic_df['clics_lien'].apply(
+                lambda x: format_metric_color(x, (clics_q25, clics_q50, clics_q75), inverse=False, decimals=0)
+            )
+            trafic_df['Impressions'] = trafic_df['impressions'].apply(lambda x: f"{x:,.0f}")
+            trafic_df['Score'] = trafic_df['score_trafic'].apply(format_score_color)
+            
+            action_format = {'scale': '🚀', 'test': '⚡', 'monitor': '👁️', 'pause': '⏸️'}
+            trafic_df['Act.'] = trafic_df['action'].map(action_format)
+            
+            # Afficher
+            st.dataframe(
+                trafic_df[['format', 'Nom', 'CTR %', 'CPC €', 'Clics', 'Impressions', 'Score', 'Act.']],
+                use_container_width=True,
+                height=400,
+                column_config={
+                    "format": st.column_config.TextColumn("Format", width=60),
+                    "Nom": st.column_config.TextColumn("Nom", width=300),
+                    "CTR %": st.column_config.TextColumn("CTR", width=90),
+                    "CPC €": st.column_config.TextColumn("CPC", width=90),
+                    "Clics": st.column_config.TextColumn("Clics", width=90),
+                    "Impressions": st.column_config.TextColumn("Impr.", width=90),
+                    "Score": st.column_config.TextColumn("Score", width=100),
+                    "Act.": st.column_config.TextColumn("", width=40),
+                },
+                hide_index=True
+            )
+            
+            # Légende
+            st.caption("🟢 Excellent (top 25%) | 🟡 Bon (médiane) | 🟠 Moyen (bottom 25%) | 🔴 Faible | *CPC : plus bas = meilleur*")
+        
+        # ===== TABLEAU NOTORIÉTÉ =====
+        with tab_notoriete:
+            st.markdown("""
+            **Composition du score Notoriété :** CPM inversé (40%) + Couverture (60%)
+            
+            *Plus la couverture est élevée, meilleur est le score. Plus le CPM est bas, meilleur est le score.*
+            """)
+            
+            notoriete_df = filtered_df[['nom', 'format', 'cpm', 'reach', 'impressions', 'frequency', 'score_notoriete', 'action']].copy()
+            
+            # Formater les colonnes
+            notoriete_df['Nom'] = notoriete_df['nom'].str[:60]
+            notoriete_df['CPM €'] = notoriete_df['cpm'].apply(
+                lambda x: format_metric_color(x, (cpm_q25, cpm_q50, cpm_q75), inverse=True, suffix="€", decimals=2)
+            )
+            notoriete_df['Couverture'] = notoriete_df['reach'].apply(
+                lambda x: format_metric_color(x, (reach_q25, reach_q50, reach_q75), inverse=False, decimals=0)
+            )
+            notoriete_df['Impressions'] = notoriete_df['impressions'].apply(lambda x: f"{x:,.0f}")
+            notoriete_df['Frequency'] = notoriete_df['frequency'].apply(
+                lambda x: f"{'🟢' if x < 2 else '🟡' if x < 3 else '🔴'} {x:.2f}"
+            )
+            notoriete_df['Score'] = notoriete_df['score_notoriete'].apply(format_score_color)
+            
+            action_format = {'scale': '🚀', 'test': '⚡', 'monitor': '👁️', 'pause': '⏸️'}
+            notoriete_df['Act.'] = notoriete_df['action'].map(action_format)
+            
+            # Afficher
+            st.dataframe(
+                notoriete_df[['format', 'Nom', 'CPM €', 'Couverture', 'Impressions', 'Frequency', 'Score', 'Act.']],
+                use_container_width=True,
+                height=400,
+                column_config={
+                    "format": st.column_config.TextColumn("Format", width=60),
+                    "Nom": st.column_config.TextColumn("Nom", width=300),
+                    "CPM €": st.column_config.TextColumn("CPM", width=90),
+                    "Couverture": st.column_config.TextColumn("Couverture", width=100),
+                    "Impressions": st.column_config.TextColumn("Impr.", width=90),
+                    "Frequency": st.column_config.TextColumn("Freq.", width=80),
+                    "Score": st.column_config.TextColumn("Score", width=100),
+                    "Act.": st.column_config.TextColumn("", width=40),
+                },
+                hide_index=True
+            )
+            
+            # Légende
+            st.caption("🟢 Excellent (top 25%) | 🟡 Bon (médiane) | 🟠 Moyen (bottom 25%) | 🔴 Faible | *CPM : plus bas = meilleur* | *Frequency : <2 🟢, 2-3 🟡, >3 🔴*")
+        
+        st.divider()
+        
         # Détail d'une créative sélectionnée
         st.subheader("🔍 Détail créative")
         selected_creative = st.selectbox(
