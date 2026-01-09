@@ -1655,7 +1655,7 @@ def main():
         reach_q25, reach_q50, reach_q75 = filtered_df['reach'].quantile([0.25, 0.5, 0.75])
         
         # Onglets pour les 3 tableaux
-        tab_profit, tab_trafic, tab_notoriete = st.tabs(["💰 Score Profit", "🚀 Score Trafic", "👁️ Score Notoriété"])
+        tab_profit, tab_trafic, tab_notoriete, tab_tendance = st.tabs(["💰 Score Profit", "🚀 Score Trafic", "👁️ Score Notoriété", "📈 Score Tendance"])
         
         # ===== TABLEAU PROFIT =====
         with tab_profit:
@@ -1811,6 +1811,108 @@ def main():
             
             # Légende
             st.caption("🟢 Excellent (top 25%) | 🟡 Bon (médiane) | 🟠 Moyen (bottom 25%) | 🔴 Faible | *CPM : plus bas = meilleur* | *Frequency : <2 🟢, 2-3 🟡, >3 🔴*")
+        
+        # ===== TABLEAU TENDANCE =====
+        with tab_tendance:
+            st.markdown("""
+            **Composition du score Tendance :** Δ CTR (40%) + Δ CPC inversé (25%) + Δ CPM inversé (20%) + Δ Impressions (15%)
+            
+            *Comparaison 7 derniers jours vs 7 jours précédents. Une hausse du CTR/Impressions est positive, une hausse du CPC/CPM est négative.*
+            """)
+            
+            if not has_daily:
+                st.warning("⚠️ Chargez les données quotidiennes pour voir les tendances.")
+            else:
+                tendance_df = filtered_df[['nom', 'format', 'trend_ctr', 'trend_cpm', 'trend_score', 'action']].copy()
+                
+                # Ajouter les autres métriques de tendance depuis le dict trends
+                tendance_df['trend_cpc'] = tendance_df['nom'].apply(lambda x: trends.get(x, {}).get('cpc', 0))
+                tendance_df['trend_impr'] = tendance_df['nom'].apply(lambda x: trends.get(x, {}).get('impressions', 0))
+                
+                # Fonction pour formater les variations avec couleur
+                def format_trend_metric(value, inverse=False):
+                    """Formate une variation avec couleur. inverse=True si une hausse est négative."""
+                    if pd.isna(value) or value == 0:
+                        return "⚪ 0%"
+                    
+                    if inverse:
+                        # Pour CPC et CPM : baisse = bon (vert), hausse = mauvais (rouge)
+                        if value <= -20:
+                            color = "🟢"
+                        elif value <= -5:
+                            color = "🟢"
+                        elif value <= 5:
+                            color = "⚪"
+                        elif value <= 20:
+                            color = "🟠"
+                        else:
+                            color = "🔴"
+                    else:
+                        # Pour CTR et Impressions : hausse = bon (vert), baisse = mauvais (rouge)
+                        if value >= 20:
+                            color = "🟢"
+                        elif value >= 5:
+                            color = "🟢"
+                        elif value >= -5:
+                            color = "⚪"
+                        elif value >= -20:
+                            color = "🟠"
+                        else:
+                            color = "🔴"
+                    
+                    sign = "+" if value > 0 else ""
+                    return f"{color} {sign}{value:.0f}%"
+                
+                def format_trend_score(score):
+                    """Formate le score de tendance avec couleur."""
+                    if score >= 20:
+                        return f"🟢 +{score:.0f} (Excellent)"
+                    elif score >= 5:
+                        return f"🟢 +{score:.0f} (Bon)"
+                    elif score >= -5:
+                        return f"⚪ {score:+.0f} (Stable)"
+                    elif score >= -20:
+                        return f"🟠 {score:.0f} (Baisse)"
+                    else:
+                        return f"🔴 {score:.0f} (Chute)"
+                
+                # Formater les colonnes
+                tendance_df['Nom'] = tendance_df['nom']
+                tendance_df['Δ CTR'] = tendance_df['trend_ctr'].apply(lambda x: format_trend_metric(x, inverse=False))
+                tendance_df['Δ CPC'] = tendance_df['trend_cpc'].apply(lambda x: format_trend_metric(x, inverse=True))
+                tendance_df['Δ CPM'] = tendance_df['trend_cpm'].apply(lambda x: format_trend_metric(x, inverse=True))
+                tendance_df['Δ Impr.'] = tendance_df['trend_impr'].apply(lambda x: format_trend_metric(x, inverse=False))
+                tendance_df['Score'] = tendance_df['trend_score'].apply(format_trend_score)
+                
+                action_format = {'scale': '🚀', 'test': '⚡', 'monitor': '👁️', 'pause': '⏸️'}
+                tendance_df['Act.'] = tendance_df['action'].map(action_format)
+                
+                # Trier par score de tendance
+                tendance_df = tendance_df.sort_values('trend_score', ascending=False)
+                
+                # Calculer la hauteur dynamique
+                table_height = min(2000, 40 + len(tendance_df) * 35)
+                
+                # Afficher
+                st.dataframe(
+                    tendance_df[['format', 'Nom', 'Δ CTR', 'Δ CPC', 'Δ CPM', 'Δ Impr.', 'Score', 'Act.']],
+                    use_container_width=True,
+                    height=table_height,
+                    column_config={
+                        "format": st.column_config.TextColumn("Format", width=60),
+                        "Nom": st.column_config.TextColumn("Nom", width=350),
+                        "Δ CTR": st.column_config.TextColumn("Δ CTR (40%)", width=100),
+                        "Δ CPC": st.column_config.TextColumn("Δ CPC (25%)", width=100),
+                        "Δ CPM": st.column_config.TextColumn("Δ CPM (20%)", width=100),
+                        "Δ Impr.": st.column_config.TextColumn("Δ Impr. (15%)", width=100),
+                        "Score": st.column_config.TextColumn("Score Tendance", width=130),
+                        "Act.": st.column_config.TextColumn("", width=40),
+                    },
+                    hide_index=True
+                )
+                
+                # Légende
+                st.caption("🟢 Amélioration | ⚪ Stable (-5% à +5%) | 🟠 Légère baisse | 🔴 Forte baisse | *CPC/CPM : baisse = 🟢, hausse = 🔴*")
         
         st.divider()
         
