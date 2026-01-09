@@ -1096,7 +1096,7 @@ def main():
             profit_df = filtered_df[['nom', 'format', 'roas', 'cpa_calc', 'cvr', 'achats', 'depense', 'score_profitabilite', 'action']].copy()
             
             # Formater les colonnes
-            profit_df['Nom'] = profit_df['nom'].str[:60]
+            profit_df['Nom'] = profit_df['nom']
             profit_df['ROAS'] = profit_df['roas'].apply(
                 lambda x: format_metric_color(x, (roas_q25, roas_q50, roas_q75), inverse=False, decimals=2)
             )
@@ -1113,14 +1113,17 @@ def main():
             action_format = {'scale': '🚀', 'test': '⚡', 'monitor': '👁️', 'pause': '⏸️'}
             profit_df['Act.'] = profit_df['action'].map(action_format)
             
+            # Calculer la hauteur dynamique (35px par ligne + 40px header)
+            table_height = min(2000, 40 + len(profit_df) * 35)
+            
             # Afficher
             st.dataframe(
                 profit_df[['format', 'Nom', 'ROAS', 'CPA €', 'CVR %', 'Achats', 'Dépense €', 'Score', 'Act.']],
                 use_container_width=True,
-                height=400,
+                height=table_height,
                 column_config={
                     "format": st.column_config.TextColumn("Format", width=60),
-                    "Nom": st.column_config.TextColumn("Nom", width=280),
+                    "Nom": st.column_config.TextColumn("Nom", width=350),
                     "ROAS": st.column_config.TextColumn("ROAS", width=80),
                     "CPA €": st.column_config.TextColumn("CPA", width=90),
                     "CVR %": st.column_config.TextColumn("CVR", width=90),
@@ -1146,7 +1149,7 @@ def main():
             trafic_df = filtered_df[['nom', 'format', 'ctr_lien', 'cpc_lien', 'clics_lien', 'impressions', 'score_trafic', 'action']].copy()
             
             # Formater les colonnes
-            trafic_df['Nom'] = trafic_df['nom'].str[:60]
+            trafic_df['Nom'] = trafic_df['nom']
             trafic_df['CTR %'] = trafic_df['ctr_lien'].apply(
                 lambda x: format_metric_color(x, (ctr_q25, ctr_q50, ctr_q75), inverse=False, suffix="%", decimals=2)
             )
@@ -1162,14 +1165,17 @@ def main():
             action_format = {'scale': '🚀', 'test': '⚡', 'monitor': '👁️', 'pause': '⏸️'}
             trafic_df['Act.'] = trafic_df['action'].map(action_format)
             
+            # Calculer la hauteur dynamique (35px par ligne + 40px header)
+            table_height = min(2000, 40 + len(trafic_df) * 35)
+            
             # Afficher
             st.dataframe(
                 trafic_df[['format', 'Nom', 'CTR %', 'CPC €', 'Clics', 'Impressions', 'Score', 'Act.']],
                 use_container_width=True,
-                height=400,
+                height=table_height,
                 column_config={
                     "format": st.column_config.TextColumn("Format", width=60),
-                    "Nom": st.column_config.TextColumn("Nom", width=300),
+                    "Nom": st.column_config.TextColumn("Nom", width=350),
                     "CTR %": st.column_config.TextColumn("CTR", width=90),
                     "CPC €": st.column_config.TextColumn("CPC", width=90),
                     "Clics": st.column_config.TextColumn("Clics", width=90),
@@ -1194,7 +1200,7 @@ def main():
             notoriete_df = filtered_df[['nom', 'format', 'cpm', 'reach', 'impressions', 'frequency', 'score_notoriete', 'action']].copy()
             
             # Formater les colonnes
-            notoriete_df['Nom'] = notoriete_df['nom'].str[:60]
+            notoriete_df['Nom'] = notoriete_df['nom']
             notoriete_df['CPM €'] = notoriete_df['cpm'].apply(
                 lambda x: format_metric_color(x, (cpm_q25, cpm_q50, cpm_q75), inverse=True, suffix="€", decimals=2)
             )
@@ -1210,14 +1216,17 @@ def main():
             action_format = {'scale': '🚀', 'test': '⚡', 'monitor': '👁️', 'pause': '⏸️'}
             notoriete_df['Act.'] = notoriete_df['action'].map(action_format)
             
+            # Calculer la hauteur dynamique (35px par ligne + 40px header)
+            table_height = min(2000, 40 + len(notoriete_df) * 35)
+            
             # Afficher
             st.dataframe(
                 notoriete_df[['format', 'Nom', 'CPM €', 'Couverture', 'Impressions', 'Frequency', 'Score', 'Act.']],
                 use_container_width=True,
-                height=400,
+                height=table_height,
                 column_config={
                     "format": st.column_config.TextColumn("Format", width=60),
-                    "Nom": st.column_config.TextColumn("Nom", width=300),
+                    "Nom": st.column_config.TextColumn("Nom", width=350),
                     "CPM €": st.column_config.TextColumn("CPM", width=90),
                     "Couverture": st.column_config.TextColumn("Couverture", width=100),
                     "Impressions": st.column_config.TextColumn("Impr.", width=90),
