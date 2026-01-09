@@ -1054,98 +1054,241 @@ def main():
     
     # ========== TAB 1: Actions du jour ==========
     with tab1:
-        st.header("Actions du jour")
+        # Calculer les KPIs globaux
+        total_spend = df['depense'].sum()
+        total_revenue = df['valeur_achats'].sum()
+        avg_roas = total_revenue / total_spend if total_spend > 0 else 0
+        total_achats = df['achats'].sum()
+        avg_ctr = df['ctr_lien'].mean()
+        avg_cpm = df['cpm'].mean()
         
         action_counts = df['action'].value_counts()
-        col1, col2, col3, col4 = st.columns(4)
+        scale_count = action_counts.get('scale', 0)
+        test_count = action_counts.get('test', 0)
+        monitor_count = action_counts.get('monitor', 0)
+        pause_count = action_counts.get('pause', 0)
         
-        with col1:
-            st.metric("🚀 À scaler", action_counts.get('scale', 0))
-        with col2:
-            st.metric("⚡ À tester", action_counts.get('test', 0))
-        with col3:
-            st.metric("👁️ À surveiller", action_counts.get('monitor', 0))
-        with col4:
-            st.metric("⏸️ À pauser", action_counts.get('pause', 0))
+        # Calculer le score de santé global
+        pct_scale = (scale_count / len(df) * 100) if len(df) > 0 else 0
+        pct_pause = (pause_count / len(df) * 100) if len(df) > 0 else 0
+        diversification = calculate_diversification_score(df)
+        alerts_count = len(detect_alerts(df, trends))
         
-        st.divider()
+        health_score = round(
+            (pct_scale * 2) +  # Bonus pour créatives à scaler
+            (100 - pct_pause * 3) * 0.3 +  # Pénalité pour créatives à pauser
+            (diversification['score'] * 0.3) +  # Score diversification
+            (max(0, 30 - alerts_count * 5))  # Pénalité alertes
+        )
+        health_score = max(0, min(100, health_score))
         
-        col_left, col_right = st.columns(2)
+        health_status = "🟢 Excellent" if health_score >= 75 else "🟡 Bon" if health_score >= 50 else "🟠 Moyen" if health_score >= 30 else "🔴 Critique"
         
-        with col_left:
-            st.subheader("🚀 À scaler")
-            scale_df = df[df['action'] == 'scale'].sort_values('scale_potential', ascending=False)
+        # Budget par action
+        budget_scale = df[df['action'] == 'scale']['depense'].sum()
+        budget_test = df[df['action'] == 'test']['depense'].sum()
+        budget_monitor = df[df['action'] == 'monitor']['depense'].sum()
+        budget_pause = df[df['action'] == 'pause']['depense'].sum()
+        
+        pct_budget_scale = (budget_scale / total_spend * 100) if total_spend > 0 else 0
+        pct_budget_test = (budget_test / total_spend * 100) if total_spend > 0 else 0
+        pct_budget_monitor = (budget_monitor / total_spend * 100) if total_spend > 0 else 0
+        pct_budget_pause = (budget_pause / total_spend * 100) if total_spend > 0 else 0
+        
+        # Potentiel moyen par action
+        pot_scale = df[df['action'] == 'scale']['scale_potential'].mean() if scale_count > 0 else 0
+        pot_test = df[df['action'] == 'test']['scale_potential'].mean() if test_count > 0 else 0
+        
+        # ===== LIGNE 1: KPIs GLOBAUX =====
+        st.markdown("##### 📊 Performance globale")
+        kpi1, kpi2, kpi3, kpi4, kpi5, kpi6 = st.columns(6)
+        
+        with kpi1:
+            spend_delta = None
+            if has_daily:
+                # Calculer variation vs 7j précédents
+                spend_delta = f"Budget total"
+            st.metric("💰 Dépense", f"{total_spend:,.0f}€", delta=spend_delta)
+        
+        with kpi2:
+            roas_status = "↗ Rentable" if avg_roas >= 2 else "↘ À améliorer" if avg_roas < 1 else None
+            st.metric("📈 ROAS", f"{avg_roas:.2f}", delta=roas_status, delta_color="normal" if avg_roas >= 2 else "inverse")
+        
+        with kpi3:
+            st.metric("🛒 Achats", f"{total_achats:,.0f}")
+        
+        with kpi4:
+            ctr_status = "Bon" if avg_ctr >= 1.5 else None
+            st.metric("👆 CTR", f"{avg_ctr:.2f}%", delta=ctr_status)
+        
+        with kpi5:
+            st.metric("💵 CPM", f"{avg_cpm:.2f}€")
+        
+        with kpi6:
+            st.metric("🎯 Santé", f"{health_score}/100", delta=health_status, delta_color="normal" if health_score >= 50 else "inverse")
+        
+        # ===== LIGNE 2: RÉSUMÉ EXÉCUTIF =====
+        summary_parts = []
+        if scale_count > 0:
+            summary_parts.append(f"**{scale_count}** créa{'s' if scale_count > 1 else ''} à scaler ({pct_budget_scale:.0f}% budget)")
+        if pause_count > 0:
+            summary_parts.append(f"**{pause_count}** à pauser")
+        if alerts_count > 0:
+            summary_parts.append(f"**{alerts_count}** alerte{'s' if alerts_count > 1 else ''}")
+        summary_parts.append(f"Diversification: **{diversification['score']}/100**")
+        
+        st.info(f"🎯 {' · '.join(summary_parts)}")
+        
+        # ===== LIGNE 3: CARDS ACTIONS + GRAPHIQUE =====
+        col_cards, col_chart = st.columns([3, 1])
+        
+        with col_cards:
+            # 4 cards métriques enrichies sur une ligne
+            c1, c2, c3, c4 = st.columns(4)
             
-            if len(scale_df) > 0:
-                for _, row in scale_df.iterrows():
-                    trend_badge = ""
-                    if has_daily:
-                        if row['trend_signal'] == 'up':
-                            trend_badge = f"<span class='trend-badge trend-up'>↗ +{row['trend_score']:.0f}%</span>"
-                        elif row['trend_signal'] == 'down':
-                            trend_badge = f"<span class='trend-badge trend-down'>↘ {row['trend_score']:.0f}%</span>"
-                    
-                    st.markdown(f"""
-                    <div class="action-card scale-card">
-                        <strong>{row['format']}</strong> | {row['nom'][:45]}... {trend_badge}
-                        <br><small>{row['recommendation']}</small>
-                        <br><small>ROAS: {row['roas']:.1f} | CTR: {row['ctr_lien']:.2f}% | Potentiel: {row['scale_potential']}</small>
-                    </div>
-                    """, unsafe_allow_html=True)
-            else:
-                st.info("Aucune créative prête à scaler")
-            
-            st.subheader("👁️ À surveiller")
-            monitor_df = df[df['action'] == 'monitor'].sort_values('scale_potential', ascending=False).head(5)
-            
-            for _, row in monitor_df.iterrows():
-                trend_badge = ""
-                if has_daily:
-                    if row['trend_signal'] == 'up':
-                        trend_badge = f"<span class='trend-badge trend-up'>↗ +{row['trend_score']:.0f}%</span>"
-                    elif row['trend_signal'] == 'down':
-                        trend_badge = f"<span class='trend-badge trend-down'>↘ {row['trend_score']:.0f}%</span>"
-                    else:
-                        trend_badge = f"<span class='trend-badge trend-stable'>→</span>"
-                
+            with c1:
                 st.markdown(f"""
-                <div class="action-card monitor-card">
-                    <strong>{row['format']}</strong> | {row['nom'][:45]}... {trend_badge}
-                    <br><small>{row['recommendation']}</small>
+                <div class="action-card scale-card" style="text-align:center;">
+                    <div style="font-size:2rem; font-weight:700;">{scale_count}</div>
+                    <div style="font-weight:600;">🚀 À scaler</div>
+                    <div style="font-size:0.75rem; opacity:0.8;">{pct_budget_scale:.0f}% budget · Pot. {pot_scale:.0f}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with c2:
+                st.markdown(f"""
+                <div class="action-card test-card" style="text-align:center;">
+                    <div style="font-size:2rem; font-weight:700;">{test_count}</div>
+                    <div style="font-weight:600;">⚡ À tester</div>
+                    <div style="font-size:0.75rem; opacity:0.8;">{pct_budget_test:.0f}% budget · Pot. {pot_test:.0f}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with c3:
+                st.markdown(f"""
+                <div class="action-card monitor-card" style="text-align:center;">
+                    <div style="font-size:2rem; font-weight:700;">{monitor_count}</div>
+                    <div style="font-weight:600;">👁️ Surveiller</div>
+                    <div style="font-size:0.75rem; opacity:0.8;">{pct_budget_monitor:.0f}% budget</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with c4:
+                st.markdown(f"""
+                <div class="action-card pause-card" style="text-align:center;">
+                    <div style="font-size:2rem; font-weight:700;">{pause_count}</div>
+                    <div style="font-weight:600;">⏸️ À pauser</div>
+                    <div style="font-size:0.75rem; opacity:0.8;">{pct_budget_pause:.0f}% budget</div>
                 </div>
                 """, unsafe_allow_html=True)
         
+        with col_chart:
+            # Mini pie chart répartition budget
+            fig_pie = go.Figure(data=[go.Pie(
+                labels=['Scale', 'Test', 'Monitor', 'Pause'],
+                values=[budget_scale, budget_test, budget_monitor, budget_pause],
+                hole=0.6,
+                marker_colors=['#10B981', '#3B82F6', '#F59E0B', '#EF4444'],
+                textinfo='none',
+                hovertemplate='%{label}: %{percent}<extra></extra>'
+            )])
+            fig_pie.update_layout(
+                showlegend=False,
+                margin=dict(t=10, b=10, l=10, r=10),
+                height=120,
+                annotations=[dict(text='Budget', x=0.5, y=0.5, font_size=11, showarrow=False)]
+            )
+            st.plotly_chart(fig_pie, use_container_width=True)
+        
+        # ===== LIGNE 4: LISTES D'ACTIONS (COMPACT) =====
+        col_left, col_right = st.columns(2)
+        
+        with col_left:
+            # À scaler (compact)
+            st.markdown("##### 🚀 À scaler")
+            scale_df = df[df['action'] == 'scale'].sort_values('scale_potential', ascending=False)
+            
+            if len(scale_df) > 0:
+                for _, row in scale_df.head(4).iterrows():
+                    trend_badge = ""
+                    if has_daily and row['trend_signal'] == 'up':
+                        trend_badge = f"<span class='trend-badge trend-up'>+{row['trend_score']:.0f}%</span>"
+                    elif has_daily and row['trend_signal'] == 'down':
+                        trend_badge = f"<span class='trend-badge trend-down'>{row['trend_score']:.0f}%</span>"
+                    
+                    st.markdown(f"""
+                    <div class="action-card scale-card" style="padding:0.6rem 0.8rem; margin-bottom:0.4rem;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <strong>{row['format']}</strong> · {row['nom'][:35]}{'...' if len(row['nom']) > 35 else ''} {trend_badge}
+                                <div style="font-size:0.75rem; opacity:0.8;">ROAS {row['roas']:.1f} · CTR {row['ctr_lien']:.2f}% · Pot. {row['scale_potential']}</div>
+                            </div>
+                            <div style="font-size:0.7rem; background:#10B981; color:white; padding:2px 8px; border-radius:4px;">+20%</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                if len(scale_df) > 4:
+                    st.caption(f"... et {len(scale_df) - 4} autre(s)")
+            else:
+                st.caption("Aucune créative prête à scaler")
+            
+            # À surveiller (très compact)
+            st.markdown("##### 👁️ À surveiller")
+            monitor_df = df[df['action'] == 'monitor'].sort_values('scale_potential', ascending=False).head(3)
+            
+            if len(monitor_df) > 0:
+                for _, row in monitor_df.iterrows():
+                    trend_icon = "→"
+                    if has_daily:
+                        trend_icon = "↗" if row['trend_signal'] == 'up' else "↘" if row['trend_signal'] == 'down' else "→"
+                    
+                    st.markdown(f"""
+                    <div class="action-card monitor-card" style="padding:0.5rem 0.8rem; margin-bottom:0.3rem;">
+                        <strong>{row['format']}</strong> · {row['nom'][:30]}... <span style="opacity:0.6;">{trend_icon}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+        
         with col_right:
-            st.subheader("⚡ À tester")
+            # À tester (compact)
+            st.markdown("##### ⚡ À tester")
             test_df = df[df['action'] == 'test'].sort_values('scale_potential', ascending=False)
             
             if len(test_df) > 0:
-                for _, row in test_df.iterrows():
+                for _, row in test_df.head(4).iterrows():
                     st.markdown(f"""
-                    <div class="action-card test-card">
-                        <strong>{row['format']}</strong> | {row['nom'][:45]}...
-                        <br><small>{row['recommendation']}</small>
-                        <br><small>ROAS: {row['roas']:.1f} | Confiance: {row['coefficient_confiance']*100:.0f}%</small>
+                    <div class="action-card test-card" style="padding:0.6rem 0.8rem; margin-bottom:0.4rem;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <strong>{row['format']}</strong> · {row['nom'][:35]}{'...' if len(row['nom']) > 35 else ''}
+                                <div style="font-size:0.75rem; opacity:0.8;">ROAS {row['roas']:.1f} · Confiance {row['coefficient_confiance']*100:.0f}%</div>
+                            </div>
+                            <div style="font-size:0.7rem; background:#3B82F6; color:white; padding:2px 8px; border-radius:4px;">+50%</div>
+                        </div>
                     </div>
                     """, unsafe_allow_html=True)
+                if len(test_df) > 4:
+                    st.caption(f"... et {len(test_df) - 4} autre(s)")
             else:
-                st.info("Aucune créative à tester")
+                st.caption("Aucune créative à tester")
             
-            st.subheader("⏸️ À pauser")
+            # À pauser (compact)
+            st.markdown("##### ⏸️ À pauser")
             pause_df = df[df['action'] == 'pause']
             
             if len(pause_df) > 0:
-                for _, row in pause_df.iterrows():
+                for _, row in pause_df.head(3).iterrows():
                     trend_badge = ""
                     if has_daily and row['trend_score'] < -20:
-                        trend_badge = f"<span class='trend-badge trend-down'>↘ {row['trend_score']:.0f}%</span>"
+                        trend_badge = f"<span class='trend-badge trend-down'>{row['trend_score']:.0f}%</span>"
                     
                     st.markdown(f"""
-                    <div class="action-card pause-card">
-                        <strong>{row['format']}</strong> | {row['nom'][:45]}... {trend_badge}
-                        <br><small>{row['recommendation']}</small>
+                    <div class="action-card pause-card" style="padding:0.5rem 0.8rem; margin-bottom:0.3rem;">
+                        <strong>{row['format']}</strong> · {row['nom'][:30]}... {trend_badge}
+                        <div style="font-size:0.7rem; opacity:0.8;">Freq. {row['frequency']:.2f}</div>
                     </div>
                     """, unsafe_allow_html=True)
+                if len(pause_df) > 3:
+                    st.caption(f"... et {len(pause_df) - 3} autre(s)")
             else:
                 st.success("✅ Aucune créative à pauser")
     
