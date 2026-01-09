@@ -192,7 +192,7 @@ def load_daily_data(uploaded_file):
     return df
 
 
-def calculate_trends_from_daily(df_daily, lookback_days=14):
+def calculate_trends_from_daily(df_daily, lookback_days=30):
     """Calcule les tendances à partir des données quotidiennes."""
     
     if df_daily is None or len(df_daily) == 0 or 'date' not in df_daily.columns:
@@ -205,19 +205,21 @@ def calculate_trends_from_daily(df_daily, lookback_days=14):
     date_max = df_daily['date'].max()
     date_7j = date_max - timedelta(days=6)
     date_14j = date_max - timedelta(days=13)
+    date_30j = date_max - timedelta(days=29)
     
     trends = {}
     sparklines = {}
     
     for nom in df_daily['nom'].unique():
         df_crea = df_daily[df_daily['nom'] == nom].sort_values('date')
-        df_14j = df_crea[df_crea['date'] >= date_14j]
+        df_30j = df_crea[df_crea['date'] >= date_30j]
         
+        # Stocker les 30 derniers jours de données
         sparkline_data = []
-        dates = pd.date_range(start=date_14j, end=date_max, freq='D')
+        dates = pd.date_range(start=date_30j, end=date_max, freq='D')
         
         for d in dates:
-            row = df_14j[df_14j['date'].dt.date == d.date()]
+            row = df_30j[df_30j['date'].dt.date == d.date()]
             if len(row) > 0 and row.iloc[0].get('impressions', 0) > 0:
                 sparkline_data.append({
                     'date': d.strftime('%Y-%m-%d'),
@@ -234,6 +236,7 @@ def calculate_trends_from_daily(df_daily, lookback_days=14):
         
         sparklines[nom] = sparkline_data
         
+        # Calcul des tendances sur 7j vs 7j précédents
         df_recent = df_crea[df_crea['date'] >= date_7j]
         df_precedent = df_crea[(df_crea['date'] >= date_14j) & (df_crea['date'] < date_7j)]
         
@@ -951,7 +954,62 @@ def main():
             # Graphique d'évolution multi-métriques
             if has_daily and selected_creative in sparklines:
                 st.markdown("---")
-                st.markdown("**📈 Évolution des métriques (14 jours)**")
+                st.markdown("**📈 Évolution des métriques**")
+                
+                # Sélection de la plage de dates
+                col_date1, col_date2 = st.columns([1, 2])
+                
+                with col_date1:
+                    date_range_option = st.selectbox(
+                        "Plage de dates",
+                        options=["7 derniers jours", "14 derniers jours", "30 derniers jours", "Personnalisé"],
+                        index=1
+                    )
+                
+                # Récupérer toutes les données disponibles
+                sparkline_data_full = sparklines[selected_creative]
+                all_dates = [d.get('date', '') for d in sparkline_data_full]
+                
+                if all_dates:
+                    min_date = datetime.strptime(min(all_dates), '%Y-%m-%d').date()
+                    max_date = datetime.strptime(max(all_dates), '%Y-%m-%d').date()
+                    
+                    # Déterminer les dates de début et fin selon l'option choisie
+                    if date_range_option == "7 derniers jours":
+                        start_date = max_date - timedelta(days=6)
+                        end_date = max_date
+                    elif date_range_option == "14 derniers jours":
+                        start_date = max_date - timedelta(days=13)
+                        end_date = max_date
+                    elif date_range_option == "30 derniers jours":
+                        start_date = max_date - timedelta(days=29)
+                        end_date = max_date
+                    else:  # Personnalisé
+                        with col_date2:
+                            date_col1, date_col2 = st.columns(2)
+                            with date_col1:
+                                start_date = st.date_input(
+                                    "Date de début",
+                                    value=max_date - timedelta(days=13),
+                                    min_value=min_date,
+                                    max_value=max_date
+                                )
+                            with date_col2:
+                                end_date = st.date_input(
+                                    "Date de fin",
+                                    value=max_date,
+                                    min_value=min_date,
+                                    max_value=max_date
+                                )
+                    
+                    # Filtrer les données selon la plage sélectionnée
+                    sparkline_data = [
+                        d for d in sparkline_data_full 
+                        if start_date <= datetime.strptime(d.get('date', '2000-01-01'), '%Y-%m-%d').date() <= end_date
+                    ]
+                    
+                    # Afficher la plage sélectionnée
+                    st.caption(f"📅 Du {start_date.strftime('%d/%m/%Y')} au {end_date.strftime('%d/%m/%Y')} ({len(sparkline_data)} jours)")
                 
                 # Sélection des métriques à afficher
                 available_metrics = {
@@ -968,8 +1026,7 @@ def main():
                     help="Vous pouvez sélectionner plusieurs métriques pour les comparer"
                 )
                 
-                if selected_metrics:
-                    sparkline_data = sparklines[selected_creative]
+                if selected_metrics and sparkline_data:
                     
                     # Créer le graphique
                     fig = go.Figure()
@@ -1042,17 +1099,22 @@ def main():
                     
                     st.plotly_chart(fig, use_container_width=True)
                     
-                    # Afficher les variations
-                    st.markdown("**📊 Variations 7j vs 7j précédents**")
+                    # Afficher les variations sur la période sélectionnée
+                    st.markdown("**📊 Variations sur la période**")
                     var_cols = st.columns(len(selected_metrics))
                     
                     for i, metric_label in enumerate(selected_metrics):
                         metric_key = available_metrics[metric_label]
                         values = [d.get(metric_key, 0) for d in sparkline_data]
                         
-                        if len(values) >= 8:
-                            recent = np.mean([v for v in values[-7:] if v > 0]) if any(v > 0 for v in values[-7:]) else 0
-                            previous = np.mean([v for v in values[:7] if v > 0]) if any(v > 0 for v in values[:7]) else 0
+                        if len(values) >= 2:
+                            # Calculer la moyenne de la première moitié vs deuxième moitié
+                            mid = len(values) // 2
+                            first_half = [v for v in values[:mid] if v > 0]
+                            second_half = [v for v in values[mid:] if v > 0]
+                            
+                            recent = np.mean(second_half) if second_half else 0
+                            previous = np.mean(first_half) if first_half else 0
                             
                             if previous > 0:
                                 variation = ((recent - previous) / previous) * 100
@@ -1063,6 +1125,14 @@ def main():
                                         f"{recent:.2f}" if metric_key != 'impressions' else f"{recent:,.0f}",
                                         f"{variation:+.1f}%",
                                         delta_color=delta_color
+                                    )
+                            else:
+                                with var_cols[i]:
+                                    current_val = np.mean([v for v in values if v > 0]) if any(v > 0 for v in values) else 0
+                                    st.metric(
+                                        metric_label,
+                                        f"{current_val:.2f}" if metric_key != 'impressions' else f"{current_val:,.0f}",
+                                        "N/A"
                                     )
                 else:
                     st.info("👆 Sélectionnez au moins une métrique pour voir le graphique")
