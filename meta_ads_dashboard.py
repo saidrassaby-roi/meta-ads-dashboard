@@ -916,7 +916,7 @@ def main():
         selected_creative = st.selectbox(
             "Sélectionner une créative pour voir le détail",
             options=filtered_df['nom'].tolist(),
-            format_func=lambda x: f"{filtered_df[filtered_df['nom']==x]['format'].values[0]} | {x[:50]}..."
+            format_func=lambda x: f"{filtered_df[filtered_df['nom']==x]['format'].values[0]} | {x}"
         )
         
         if selected_creative:
