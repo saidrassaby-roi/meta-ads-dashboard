@@ -816,7 +816,10 @@ def main():
     with tab3:
         st.header("Tableau détaillé")
         
-        # Filtres
+        # Barre de recherche
+        search_query = st.text_input("🔍 Rechercher une créative", placeholder="Tapez le nom de la créative...")
+        
+        # Filtres sur une ligne
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             format_filter = st.multiselect("Format", options=df['format'].unique(), default=list(df['format'].unique()))
@@ -824,93 +827,197 @@ def main():
             action_filter = st.multiselect("Action", options=df['action'].unique(), default=list(df['action'].unique()))
         with col3:
             sort_by = st.selectbox("Trier par", 
-                options=['score_global', 'scale_potential', 'score_profitabilite', 'score_trafic', 'score_notoriete', 'trend_score'],
+                options=['scale_potential', 'score_global', 'score_profitabilite', 'score_trafic', 'score_notoriete', 'trend_score', 'roas', 'ctr_lien', 'depense'],
                 format_func=lambda x: {
                     'score_global': '⭐ Global', 'scale_potential': 'Potentiel', 
                     'score_profitabilite': '💰 Profit', 'score_trafic': '🚀 Trafic', 
-                    'score_notoriete': '👁️ Notoriété', 'trend_score': '📈 Tendance'
+                    'score_notoriete': '👁️ Notoriété', 'trend_score': '📈 Tendance',
+                    'roas': 'ROAS', 'ctr_lien': 'CTR', 'depense': 'Dépense'
                 }.get(x, x))
         with col4:
             sort_order = st.radio("Ordre", ["Décroissant", "Croissant"], horizontal=True)
         
-        # Filtrer et trier
+        # Filtres avancés (expandable)
+        with st.expander("🎛️ Filtres avancés"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                min_roas = st.number_input("ROAS minimum", min_value=0.0, max_value=50.0, value=0.0, step=0.5)
+            with col2:
+                min_potential = st.slider("Potentiel minimum", 0, 100, 0)
+            with col3:
+                max_frequency = st.number_input("Frequency maximum", min_value=1.0, max_value=10.0, value=10.0, step=0.5)
+        
+        # Sélection des colonnes à afficher
+        with st.expander("📊 Colonnes à afficher"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                show_scores = st.checkbox("Scores (Profit, Trafic, Notoriété, Global)", value=True)
+            with col2:
+                show_metrics = st.checkbox("Métriques (ROAS, CTR, Dépense, Frequency)", value=True)
+            with col3:
+                show_confiance = st.checkbox("Confiance", value=False)
+        
+        # Appliquer les filtres
         filtered_df = df[
             (df['format'].isin(format_filter)) &
-            (df['action'].isin(action_filter))
-        ].sort_values(sort_by, ascending=(sort_order == "Croissant"))
+            (df['action'].isin(action_filter)) &
+            (df['roas'] >= min_roas) &
+            (df['scale_potential'] >= min_potential) &
+            (df['frequency'] <= max_frequency)
+        ]
+        
+        # Appliquer la recherche
+        if search_query:
+            filtered_df = filtered_df[filtered_df['nom'].str.lower().str.contains(search_query.lower())]
+        
+        # Trier
+        filtered_df = filtered_df.sort_values(sort_by, ascending=(sort_order == "Croissant"))
         
         st.caption(f"{len(filtered_df)} créatives affichées")
+        
+        # Fonction pour colorer les grades
+        def format_grade(score, variation=0):
+            grade = get_grade(score)
+            grade_colors = {'A': '🟢', 'B': '🟢', 'C': '🟡', 'D': '🟠', 'F': '🔴'}
+            icon = grade_colors.get(grade, '')
+            var_str = f" (+{variation})" if variation > 0 else f" ({variation})" if variation < 0 else ""
+            return f"{score} {icon}{grade}{var_str}"
+        
+        # Fonction pour colorer les tendances
+        def format_trend(value):
+            if value > 10:
+                return f"🟢 +{value:.0f}%"
+            elif value < -10:
+                return f"🔴 {value:.0f}%"
+            elif value != 0:
+                return f"⚪ {value:+.0f}%"
+            else:
+                return "⚪ 0%"
         
         # Préparer le dataframe pour l'affichage
         display_df = filtered_df.copy()
         
-        # Formater les colonnes de score avec grades
-        display_df['💰 Profit'] = display_df.apply(
-            lambda r: f"{r['score_profitabilite']} {get_grade(r['score_profitabilite'])}" + 
-                     (f" (+{r['var_profit']})" if r['var_profit'] > 0 else f" ({r['var_profit']})" if r['var_profit'] < 0 else ""), 
-            axis=1
-        )
-        display_df['🚀 Trafic'] = display_df.apply(
-            lambda r: f"{r['score_trafic']} {get_grade(r['score_trafic'])}" + 
-                     (f" (+{r['var_trafic']})" if r['var_trafic'] > 0 else f" ({r['var_trafic']})" if r['var_trafic'] < 0 else ""), 
-            axis=1
-        )
-        display_df['👁️ Notoriété'] = display_df.apply(
-            lambda r: f"{r['score_notoriete']} {get_grade(r['score_notoriete'])}" + 
-                     (f" (+{r['var_notoriete']})" if r['var_notoriete'] > 0 else f" ({r['var_notoriete']})" if r['var_notoriete'] < 0 else ""), 
-            axis=1
-        )
-        display_df['⭐ Global'] = display_df.apply(
-            lambda r: f"{r['score_global']} {get_grade(r['score_global'])}" + 
-                     (f" (+{r['var_global']})" if r['var_global'] > 0 else f" ({r['var_global']})" if r['var_global'] < 0 else ""), 
-            axis=1
-        )
+        # Colonnes de base (toujours visibles)
+        display_df['Nom'] = display_df['nom']
         
-        # Formater la tendance
+        # Tendance formatée
         if has_daily:
-            display_df['📈 Tendance'] = display_df['trend_score'].apply(
-                lambda x: f"{'↗' if x > 10 else '↘' if x < -10 else '→'} {x:+.0f}%" if x != 0 else "→ 0%"
-            )
+            display_df['📈 Tendance'] = display_df['trend_score'].apply(format_trend)
         else:
             display_df['📈 Tendance'] = "-"
         
-        # Formater l'action
-        action_icons = {'scale': '🚀 Scale', 'test': '⚡ Test', 'monitor': '👁️ Monitor', 'pause': '⏸️ Pause'}
-        display_df['Action'] = display_df['action'].map(action_icons)
+        # Scores formatés avec grades colorés
+        display_df['💰 Profit'] = display_df.apply(
+            lambda r: format_grade(r['score_profitabilite'], r.get('var_profit', 0)), axis=1
+        )
+        display_df['🚀 Trafic'] = display_df.apply(
+            lambda r: format_grade(r['score_trafic'], r.get('var_trafic', 0)), axis=1
+        )
+        display_df['👁️ Notoriété'] = display_df.apply(
+            lambda r: format_grade(r['score_notoriete'], r.get('var_notoriete', 0)), axis=1
+        )
+        display_df['⭐ Global'] = display_df.apply(
+            lambda r: format_grade(r['score_global'], r.get('var_global', 0)), axis=1
+        )
         
-        # Nom complet (sans troncature)
-        display_df['Nom'] = display_df['nom']
+        # Métriques formatées
+        display_df['ROAS'] = display_df['roas'].apply(lambda x: f"{x:.2f}" if x > 0 else "-")
+        display_df['CTR %'] = display_df['ctr_lien'].apply(lambda x: f"{x:.2f}%")
+        display_df['Dépense €'] = display_df['depense'].apply(lambda x: f"{x:.2f}€")
+        display_df['Frequency'] = display_df['frequency'].apply(
+            lambda x: f"{'🔴' if x > 3 else '🟡' if x > 2 else '🟢'} {x:.2f}"
+        )
+        display_df['Confiance'] = display_df['coefficient_confiance'].apply(
+            lambda x: f"{'🟢' if x >= 0.7 else '🟡' if x >= 0.5 else '🔴'} {x*100:.0f}%"
+        )
         
-        # Sélectionner les colonnes à afficher
-        columns_to_show = ['format', 'Nom', '📈 Tendance', '💰 Profit', '🚀 Trafic', '👁️ Notoriété', '⭐ Global', 'scale_potential', 'Action']
+        # Action formatée avec couleur
+        action_format = {
+            'scale': '🚀 Scale', 
+            'test': '⚡ Test', 
+            'monitor': '👁️ Monitor', 
+            'pause': '⏸️ Pause'
+        }
+        display_df['Action'] = display_df['action'].map(action_format)
+        
+        # Construire la liste des colonnes à afficher
+        columns_to_show = ['format', 'Nom', '📈 Tendance']
+        
+        if show_scores:
+            columns_to_show.extend(['💰 Profit', '🚀 Trafic', '👁️ Notoriété', '⭐ Global'])
+        
+        if show_metrics:
+            columns_to_show.extend(['ROAS', 'CTR %', 'Dépense €', 'Frequency'])
+        
+        if show_confiance:
+            columns_to_show.append('Confiance')
+        
+        columns_to_show.extend(['scale_potential', 'Action'])
         
         final_df = display_df[columns_to_show].copy()
-        final_df.columns = ['Format', 'Nom', 'Tendance', 'Profit', 'Trafic', 'Notoriété', 'Global', 'Potentiel', 'Action']
         
-        # Afficher avec st.dataframe et configuration de colonnes
+        # Renommer les colonnes
+        rename_cols = {'format': 'Format', 'scale_potential': 'Potentiel'}
+        final_df = final_df.rename(columns=rename_cols)
+        
+        # Configuration des colonnes pour st.dataframe
+        column_config = {
+            "Format": st.column_config.TextColumn("Format", width=70),
+            "Nom": st.column_config.TextColumn("Nom", width=320),
+            "📈 Tendance": st.column_config.TextColumn("Tendance", width=90),
+            "💰 Profit": st.column_config.TextColumn("Profit", width=110),
+            "🚀 Trafic": st.column_config.TextColumn("Trafic", width=110),
+            "👁️ Notoriété": st.column_config.TextColumn("Notoriété", width=110),
+            "⭐ Global": st.column_config.TextColumn("Global", width=110),
+            "ROAS": st.column_config.TextColumn("ROAS", width=70),
+            "CTR %": st.column_config.TextColumn("CTR", width=70),
+            "Dépense €": st.column_config.TextColumn("Dépense", width=80),
+            "Frequency": st.column_config.TextColumn("Freq.", width=80),
+            "Confiance": st.column_config.TextColumn("Conf.", width=80),
+            "Potentiel": st.column_config.ProgressColumn(
+                "Potentiel",
+                format="%d",
+                min_value=0,
+                max_value=100,
+                width=100
+            ),
+            "Action": st.column_config.TextColumn("Action", width=100),
+        }
+        
+        # Fonction pour colorer les lignes selon l'action
+        def highlight_rows(row):
+            action = filtered_df.iloc[row.name]['action'] if row.name < len(filtered_df) else 'monitor'
+            colors = {
+                'scale': 'background-color: #ECFDF5',  # Vert clair
+                'test': 'background-color: #EFF6FF',   # Bleu clair
+                'monitor': 'background-color: #FFFBEB', # Jaune clair
+                'pause': 'background-color: #FEF2F2'   # Rouge clair
+            }
+            return [colors.get(action, '')] * len(row)
+        
+        # Afficher le tableau
         st.dataframe(
             final_df,
             use_container_width=True,
             height=600,
-            column_config={
-                "Format": st.column_config.TextColumn("Format", width=70),
-                "Nom": st.column_config.TextColumn("Nom", width=350),
-                "Tendance": st.column_config.TextColumn("Tendance", width=80),
-                "Profit": st.column_config.TextColumn("💰 Profit", width=100),
-                "Trafic": st.column_config.TextColumn("🚀 Trafic", width=100),
-                "Notoriété": st.column_config.TextColumn("👁️ Notoriété", width=100),
-                "Global": st.column_config.TextColumn("⭐ Global", width=100),
-                "Potentiel": st.column_config.ProgressColumn(
-                    "Potentiel",
-                    format="%d",
-                    min_value=0,
-                    max_value=100,
-                    width=90
-                ),
-                "Action": st.column_config.TextColumn("Action", width=90),
-            },
+            column_config=column_config,
             hide_index=True
         )
+        
+        # Légende des couleurs
+        st.markdown("""
+        <div style="display: flex; gap: 20px; margin-top: 10px; font-size: 12px;">
+            <span>🟢 A/B = Excellent</span>
+            <span>🟡 C = Moyen</span>
+            <span>🟠 D = Faible</span>
+            <span>🔴 F = Critique</span>
+            <span style="margin-left: 20px;">|</span>
+            <span>🚀 Scale</span>
+            <span>⚡ Test</span>
+            <span>👁️ Monitor</span>
+            <span>⏸️ Pause</span>
+        </div>
+        """, unsafe_allow_html=True)
         
         st.divider()
         
