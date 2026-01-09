@@ -1294,200 +1294,163 @@ def main():
     
     # ========== TAB 2: Alertes & Prédictions ==========
     with tab2:
-        st.header("🚨 Alertes & Prédictions")
-        
         # Générer toutes les alertes
         alerts = detect_alerts(df, trends)
         anomalies = detect_anomalies(df, sparklines) if has_daily else []
         fatigue_predictions = predict_fatigue(df, sparklines) if has_daily else []
-        diversification = calculate_diversification_score(df)
+        diversification_data = calculate_diversification_score(df)
         
-        # Compteur d'alertes
-        total_alerts = len(alerts) + len(anomalies) + len(diversification['alerts'])
-        critical_alerts = len([a for a in alerts if a['type'] == 'danger']) + len([a for a in anomalies if a['type'] == 'danger'])
+        # Compteurs
+        critical_alerts = len([a for a in alerts if a['type'] == 'danger'])
+        warning_alerts = len([a for a in alerts if a['type'] == 'warning'])
+        fatigued_soon = len([p for p in fatigue_predictions if p['days_to_fatigue'] <= 7 and p['days_to_fatigue'] > 0])
+        fatigued_critical = len([p for p in fatigue_predictions if p['days_to_fatigue'] <= 3 and p['days_to_fatigue'] > 0])
         
-        # Métriques en haut
+        # ===== RÉSUMÉ D'URGENCE =====
+        if critical_alerts > 0:
+            st.error(f"🔴 **{critical_alerts} alerte(s) critique(s)** nécessitent une action immédiate")
+        elif warning_alerts > 0:
+            st.warning(f"🟠 **{warning_alerts} alerte(s)** à surveiller")
+        else:
+            st.success("✅ **Aucune alerte critique** - Tout est sous contrôle")
+        
+        # ===== LAYOUT EN 4 COLONNES =====
         col1, col2, col3, col4 = st.columns(4)
+        
+        # --- Colonne 1: Alertes ---
         with col1:
-            st.metric("🚨 Alertes totales", total_alerts, delta=f"{critical_alerts} critiques" if critical_alerts > 0 else None, delta_color="inverse" if critical_alerts > 0 else "off")
-        with col2:
-            st.metric("⚠️ Anomalies 24h", len(anomalies))
-        with col3:
-            fatigued_soon = len([p for p in fatigue_predictions if p['days_to_fatigue'] <= 7])
-            st.metric("😴 Fatigue < 7j", fatigued_soon)
-        with col4:
-            div_color = "normal" if diversification['score'] >= 60 else "inverse"
-            st.metric("🎯 Diversification", f"{diversification['score']}/100", delta="OK" if diversification['score'] >= 60 else "À améliorer", delta_color=div_color)
-        
-        st.divider()
-        
-        # Sous-onglets pour chaque type d'alerte
-        alert_tab1, alert_tab2, alert_tab3, alert_tab4 = st.tabs([
-            f"🔔 Alertes ({len(alerts)})",
-            f"⚠️ Anomalies ({len(anomalies)})",
-            f"😴 Prédiction fatigue ({len(fatigue_predictions)})",
-            f"🎯 Diversification"
-        ])
-        
-        # --- Alertes automatiques ---
-        with alert_tab1:
-            st.subheader("🔔 Alertes automatiques")
-            st.caption("Créatives dépassant les seuils critiques (frequency > 3, tendance < -20%)")
+            st.markdown(f"##### 🔔 Alertes ({len(alerts)})")
             
             if alerts:
-                for alert in alerts:
-                    card_class = "alert-card" if alert['type'] == 'danger' else "warning-card"
+                for alert in alerts[:5]:  # Max 5
+                    icon = "🔴" if alert['type'] == 'danger' else "🟠"
                     st.markdown(f"""
-                    <div class="{card_class}">
-                        <strong>{alert['icon']} {alert['title']}</strong><br>
-                        <small>📌 {alert['creative'][:60]}...</small><br>
-                        <small>{alert['message']}</small><br>
-                        <small>💡 <em>{alert['action']}</em></small>
+                    <div style="padding:0.4rem 0.6rem; margin-bottom:0.3rem; border-left:3px solid {'#EF4444' if alert['type'] == 'danger' else '#F59E0B'}; background:{'#FEF2F2' if alert['type'] == 'danger' else '#FFFBEB'}; border-radius:4px; font-size:0.8rem;">
+                        {icon} <strong>{alert['title'][:20]}</strong><br>
+                        <span style="opacity:0.7;">{alert['creative'][:25]}...</span><br>
+                        <span style="font-size:0.7rem;">{alert['message'][:35]}...</span>
                     </div>
                     """, unsafe_allow_html=True)
+                if len(alerts) > 5:
+                    st.caption(f"... +{len(alerts) - 5} autre(s)")
             else:
-                st.success("✅ Aucune alerte ! Toutes les créatives sont dans les seuils normaux.")
+                st.markdown("""
+                <div style="padding:1rem; text-align:center; opacity:0.6;">
+                    ✅ Aucune alerte
+                </div>
+                """, unsafe_allow_html=True)
         
-        # --- Anomalies ---
-        with alert_tab2:
-            st.subheader("⚠️ Anomalies détectées (24h)")
-            st.caption("Variations brutales > 50% en 24h (CTR en chute ou CPM en hausse)")
+        # --- Colonne 2: Anomalies ---
+        with col2:
+            st.markdown(f"##### ⚠️ Anomalies 24h ({len(anomalies)})")
             
             if not has_daily:
-                st.warning("⚠️ Chargez les données quotidiennes pour détecter les anomalies.")
+                st.caption("Chargez données quotidiennes")
             elif anomalies:
-                for anomaly in anomalies:
+                for anomaly in anomalies[:4]:  # Max 4
                     st.markdown(f"""
-                    <div class="alert-card">
-                        <strong>{anomaly['icon']} {anomaly['title']}</strong><br>
-                        <small>📌 {anomaly['creative'][:60]}...</small><br>
-                        <small>{anomaly['message']}</small><br>
-                        <small>💡 <em>{anomaly['action']}</em></small>
+                    <div style="padding:0.4rem 0.6rem; margin-bottom:0.3rem; border-left:3px solid #EF4444; background:#FEF2F2; border-radius:4px; font-size:0.8rem;">
+                        ⚠️ <strong>{anomaly['title'][:18]}</strong><br>
+                        <span style="opacity:0.7;">{anomaly['creative'][:22]}...</span><br>
+                        <span style="font-size:0.7rem;">{anomaly['message'][:40]}</span>
                     </div>
                     """, unsafe_allow_html=True)
+                if len(anomalies) > 4:
+                    st.caption(f"... +{len(anomalies) - 4} autre(s)")
             else:
-                st.success("✅ Aucune anomalie détectée dans les dernières 24h.")
+                st.markdown("""
+                <div style="padding:1rem; text-align:center; opacity:0.6;">
+                    ✅ Aucune anomalie
+                </div>
+                """, unsafe_allow_html=True)
         
-        # --- Prédiction fatigue ---
-        with alert_tab3:
-            st.subheader("😴 Prédiction de fatigue créative")
-            st.caption("Estimation du nombre de jours avant que la frequency atteigne le seuil critique (4.0)")
+        # --- Colonne 3: Fatigue ---
+        with col3:
+            st.markdown(f"##### 😴 Fatigue ({fatigued_soon} < 7j)")
             
             if not has_daily:
-                st.warning("⚠️ Chargez les données quotidiennes pour les prédictions de fatigue.")
+                st.caption("Chargez données quotidiennes")
             elif fatigue_predictions:
-                # Tableau des prédictions
-                fatigue_df = pd.DataFrame(fatigue_predictions)
+                # Afficher seulement les critiques et attention
+                urgent_fatigue = [p for p in fatigue_predictions if p['days_to_fatigue'] <= 14][:5]
                 
-                # Formater pour affichage
-                fatigue_df['Statut'] = fatigue_df.apply(lambda r: f"{r['color']} {r['status'].capitalize()}", axis=1)
-                fatigue_df['Freq. actuelle'] = fatigue_df['current_freq'].apply(lambda x: f"{x:.2f}")
-                fatigue_df['Jours restants'] = fatigue_df['days_to_fatigue'].apply(
-                    lambda x: "⚠️ Déjà fatiguée" if x == 0 else f"{x} jours"
-                )
-                fatigue_df['Créative'] = fatigue_df['creative'].str[:50] + '...'
-                
-                st.dataframe(
-                    fatigue_df[['format', 'Créative', 'Freq. actuelle', 'Jours restants', 'Statut']],
-                    use_container_width=True,
-                    height=min(600, 40 + len(fatigue_df) * 35),
-                    column_config={
-                        "format": st.column_config.TextColumn("Format", width=60),
-                        "Créative": st.column_config.TextColumn("Créative", width=300),
-                        "Freq. actuelle": st.column_config.TextColumn("Frequency", width=90),
-                        "Jours restants": st.column_config.TextColumn("Jours avant fatigue", width=130),
-                        "Statut": st.column_config.TextColumn("Statut", width=100),
-                    },
-                    hide_index=True
-                )
-                
-                # Alertes pour créatives en danger
-                critical_fatigue = [p for p in fatigue_predictions if p['days_to_fatigue'] <= 3 and p['days_to_fatigue'] > 0]
-                if critical_fatigue:
-                    st.warning(f"⚠️ {len(critical_fatigue)} créative(s) seront fatiguées dans moins de 3 jours !")
-                    for p in critical_fatigue:
-                        st.markdown(f"- **{p['format']}** | {p['creative'][:40]}... → {p['days_to_fatigue']} jour(s)")
-            else:
-                st.info("Aucune prédiction disponible.")
-        
-        # --- Diversification ---
-        with alert_tab4:
-            st.subheader("🎯 Score de diversification")
-            st.caption("Analyse de la répartition du budget entre les différents angles créatifs")
-            
-            col1, col2 = st.columns([1, 2])
-            
-            with col1:
-                # Score de diversification
-                score = diversification['score']
-                if score >= 70:
-                    score_color = "🟢"
-                    score_status = "Excellent"
-                elif score >= 50:
-                    score_color = "🟡"
-                    score_status = "Acceptable"
-                else:
-                    score_color = "🔴"
-                    score_status = "À améliorer"
-                
-                st.metric("Score global", f"{score}/100", delta=score_status, delta_color="normal" if score >= 50 else "inverse")
-                
-                st.markdown(f"""
-                **Interprétation:**
-                - 🟢 70-100 : Excellente diversification
-                - 🟡 50-69 : Diversification acceptable
-                - 🔴 0-49 : Trop de concentration, risque élevé
-                """)
-            
-            with col2:
-                # Graphiques de répartition
-                if diversification['by_usp']:
-                    fig_usp = px.pie(
-                        values=list(diversification['by_usp'].values()),
-                        names=list(diversification['by_usp'].keys()),
-                        title="Répartition budget par USP",
-                        hole=0.4
-                    )
-                    fig_usp.update_layout(height=250, margin=dict(t=40, b=0, l=0, r=0))
-                    st.plotly_chart(fig_usp, use_container_width=True)
-            
-            # Alertes de concentration
-            if diversification['alerts']:
-                st.markdown("### ⚠️ Alertes de concentration")
-                for alert in diversification['alerts']:
-                    card_class = "alert-card" if alert['type'] == 'danger' else "warning-card"
+                for p in urgent_fatigue:
+                    if p['days_to_fatigue'] == 0:
+                        bg_color = "#FEF2F2"
+                        border_color = "#EF4444"
+                        days_text = "Fatiguée"
+                    elif p['days_to_fatigue'] <= 3:
+                        bg_color = "#FEF2F2"
+                        border_color = "#EF4444"
+                        days_text = f"{p['days_to_fatigue']}j"
+                    elif p['days_to_fatigue'] <= 7:
+                        bg_color = "#FFFBEB"
+                        border_color = "#F59E0B"
+                        days_text = f"{p['days_to_fatigue']}j"
+                    else:
+                        bg_color = "#F0FDF4"
+                        border_color = "#10B981"
+                        days_text = f"{p['days_to_fatigue']}j"
+                    
                     st.markdown(f"""
-                    <div class="{card_class}">
-                        <strong>{alert['icon']} {alert['title']}</strong><br>
-                        <small>{alert['message']}</small><br>
-                        <small>💡 <em>{alert['action']}</em></small>
+                    <div style="padding:0.4rem 0.6rem; margin-bottom:0.3rem; border-left:3px solid {border_color}; background:{bg_color}; border-radius:4px; font-size:0.8rem; display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <strong>{p['format']}</strong> · {p['creative'][:18]}...<br>
+                            <span style="opacity:0.7; font-size:0.7rem;">Freq: {p['current_freq']:.2f}</span>
+                        </div>
+                        <div style="font-weight:700; color:{border_color};">{days_text}</div>
                     </div>
                     """, unsafe_allow_html=True)
+                
+                ok_count = len([p for p in fatigue_predictions if p['days_to_fatigue'] > 14])
+                if ok_count > 0:
+                    st.caption(f"✅ {ok_count} créa(s) OK (> 14j)")
             else:
-                st.success("✅ Bonne diversification ! Aucune concentration excessive détectée.")
+                st.caption("Aucune prédiction")
+        
+        # --- Colonne 4: Diversification ---
+        with col4:
+            score = diversification_data['score']
+            score_color = "#10B981" if score >= 70 else "#F59E0B" if score >= 50 else "#EF4444"
+            score_bg = "#F0FDF4" if score >= 70 else "#FFFBEB" if score >= 50 else "#FEF2F2"
             
-            # Détails par dimension
-            st.markdown("### 📊 Détails par dimension")
+            st.markdown(f"##### 🎯 Diversification")
             
-            col1, col2, col3 = st.columns(3)
+            # Score avec jauge visuelle
+            st.markdown(f"""
+            <div style="padding:0.6rem; background:{score_bg}; border-radius:8px; text-align:center; margin-bottom:0.5rem;">
+                <div style="font-size:1.8rem; font-weight:700; color:{score_color};">{score}</div>
+                <div style="font-size:0.75rem; opacity:0.8;">/100</div>
+                <div style="background:#E5E7EB; border-radius:4px; height:8px; margin-top:0.5rem;">
+                    <div style="background:{score_color}; width:{score}%; height:100%; border-radius:4px;"></div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
             
-            with col1:
-                st.markdown("**Par USP**")
-                for usp, pct in sorted(diversification['by_usp'].items(), key=lambda x: -x[1]):
-                    bar_color = "🟢" if pct < 35 else "🟡" if pct < 50 else "🔴"
-                    st.markdown(f"{bar_color} {usp}: **{pct:.0f}%**")
+            # Top concentrations
+            st.markdown("<div style='font-size:0.75rem;'><strong>Répartition budget:</strong></div>", unsafe_allow_html=True)
             
-            with col2:
-                st.markdown("**Par Hook**")
-                for hook, pct in sorted(diversification['by_hook'].items(), key=lambda x: -x[1]):
-                    bar_color = "🟢" if pct < 35 else "🟡" if pct < 50 else "🔴"
-                    st.markdown(f"{bar_color} {hook}: **{pct:.0f}%**")
+            for usp, pct in sorted(diversification_data['by_usp'].items(), key=lambda x: -x[1])[:3]:
+                bar_color = "#10B981" if pct < 35 else "#F59E0B" if pct < 50 else "#EF4444"
+                st.markdown(f"""
+                <div style="font-size:0.7rem; margin-bottom:0.2rem;">
+                    <div style="display:flex; justify-content:space-between;">
+                        <span>{usp[:15]}{'...' if len(usp) > 15 else ''}</span>
+                        <span style="font-weight:600;">{pct:.0f}%</span>
+                    </div>
+                    <div style="background:#E5E7EB; border-radius:2px; height:4px;">
+                        <div style="background:{bar_color}; width:{min(pct, 100)}%; height:100%; border-radius:2px;"></div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
             
-            with col3:
-                st.markdown("**Par Format**")
-                for fmt, pct in sorted(diversification['by_format'].items(), key=lambda x: -x[1]):
-                    bar_color = "🟢" if pct < 50 else "🟡" if pct < 70 else "🔴"
-                    st.markdown(f"{bar_color} {fmt}: **{pct:.0f}%**")
+            # Alertes concentration
+            if diversification_data['alerts']:
+                st.markdown(f"""
+                <div style="margin-top:0.5rem; padding:0.3rem 0.5rem; background:#FFFBEB; border-radius:4px; font-size:0.7rem;">
+                    ⚠️ {len(diversification_data['alerts'])} alerte(s) concentration
+                </div>
+                """, unsafe_allow_html=True)
     
     # ========== TAB 3: Angles créatifs ==========
     with tab3:
