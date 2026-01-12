@@ -4,7 +4,7 @@ Meta Ads Creative Intelligence Dashboard V2.3
 Application de pilotage des créatives publicitaires Meta Ads.
 Tableau avec composants natifs Streamlit pour un affichage fiable.
 
-Auteur: Saïd Rassay
+Auteur: BNB Solutions Digitales
 Version: 2.3
 """
 
@@ -1534,50 +1534,83 @@ def main():
     
     # ========== TAB 4: Tableau détaillé ==========
     with tab4:
-        st.header("Tableau détaillé")
+        # Initialiser les états de session pour les filtres
+        if 'reset_filters' not in st.session_state:
+            st.session_state.reset_filters = False
         
-        # Barre de recherche
-        search_query = st.text_input("🔍 Rechercher une créative", placeholder="Tapez le nom de la créative...")
+        # ===== LIGNE 1: FILTRES RAPIDES PAR ACTION =====
+        action_counts = df['action'].value_counts()
+        scale_count = action_counts.get('scale', 0)
+        test_count = action_counts.get('test', 0)
+        monitor_count = action_counts.get('monitor', 0)
+        pause_count = action_counts.get('pause', 0)
         
-        # Filtres sur une ligne
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            format_filter = st.multiselect("Format", options=df['format'].unique(), default=list(df['format'].unique()))
-        with col2:
-            action_filter = st.multiselect("Action", options=df['action'].unique(), default=list(df['action'].unique()))
-        with col3:
-            sort_by = st.selectbox("Trier par", 
-                options=['scale_potential', 'score_global', 'score_profitabilite', 'score_trafic', 'score_notoriete', 'trend_score', 'roas', 'ctr_lien', 'depense'],
+        col_filters, col_reset = st.columns([5, 1])
+        
+        with col_filters:
+            filter_cols = st.columns(6)
+            with filter_cols[0]:
+                show_scale = st.checkbox(f"🚀 Scale ({scale_count})", value=True, key="filter_scale")
+            with filter_cols[1]:
+                show_test = st.checkbox(f"⚡ Test ({test_count})", value=True, key="filter_test")
+            with filter_cols[2]:
+                show_monitor = st.checkbox(f"👁️ Monitor ({monitor_count})", value=True, key="filter_monitor")
+            with filter_cols[3]:
+                show_pause = st.checkbox(f"⏸️ Pause ({pause_count})", value=True, key="filter_pause")
+            with filter_cols[4]:
+                format_options = list(df['format'].unique())
+                format_filter = st.multiselect("Format", options=format_options, default=format_options, label_visibility="collapsed")
+        
+        with col_reset:
+            if st.button("🔄 Reset", use_container_width=True):
+                st.session_state.reset_filters = True
+                st.rerun()
+        
+        # Construire le filtre d'action
+        action_filter = []
+        if show_scale: action_filter.append('scale')
+        if show_test: action_filter.append('test')
+        if show_monitor: action_filter.append('monitor')
+        if show_pause: action_filter.append('pause')
+        
+        # ===== LIGNE 2: RECHERCHE + TRI + VUE =====
+        col_search, col_sort, col_order, col_view = st.columns([3, 1.5, 1, 1.5])
+        
+        with col_search:
+            search_query = st.text_input("🔍", placeholder="Rechercher une créative...", label_visibility="collapsed")
+        
+        with col_sort:
+            sort_by = st.selectbox("Trier", 
+                options=['scale_potential', 'score_global', 'roas', 'ctr_lien', 'depense', 'trend_score'],
                 format_func=lambda x: {
-                    'score_global': '⭐ Global', 'scale_potential': 'Potentiel', 
-                    'score_profitabilite': '💰 Profit', 'score_trafic': '🚀 Trafic', 
-                    'score_notoriete': '👁️ Notoriété', 'trend_score': '📈 Tendance',
-                    'roas': 'ROAS', 'ctr_lien': 'CTR', 'depense': 'Dépense'
-                }.get(x, x))
-        with col4:
-            sort_order = st.radio("Ordre", ["Décroissant", "Croissant"], horizontal=True)
+                    'scale_potential': '🎯 Potentiel', 'score_global': '⭐ Score Global',
+                    'roas': '💰 ROAS', 'ctr_lien': '👆 CTR', 'depense': '💵 Dépense',
+                    'trend_score': '📈 Tendance'
+                }.get(x, x),
+                label_visibility="collapsed")
         
-        # Filtres avancés (expandable)
-        with st.expander("🎛️ Filtres avancés"):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                min_roas = st.number_input("ROAS minimum", min_value=0.0, max_value=50.0, value=0.0, step=0.5)
-            with col2:
-                min_potential = st.slider("Potentiel minimum", 0, 100, 0)
-            with col3:
-                max_frequency = st.number_input("Frequency maximum", min_value=1.0, max_value=10.0, value=10.0, step=0.5)
+        with col_order:
+            sort_order = st.selectbox("Ordre", ["↓ Desc", "↑ Asc"], label_visibility="collapsed")
         
-        # Sélection des colonnes à afficher
-        with st.expander("📊 Colonnes à afficher"):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                show_scores = st.checkbox("Scores (Profit, Trafic, Notoriété, Global)", value=True)
-            with col2:
-                show_metrics = st.checkbox("Métriques (ROAS, CTR, CPMu, Dépense, Frequency)", value=True)
-            with col3:
-                show_confiance = st.checkbox("Confiance", value=False)
+        with col_view:
+            view_mode = st.selectbox("Vue",
+                options=['complete', 'scores', 'metrics', 'minimal'],
+                format_func=lambda x: {
+                    'complete': '📊 Complète', 'scores': '🎯 Scores',
+                    'metrics': '📈 Métriques', 'minimal': '⚡ Minimale'
+                }.get(x, x),
+                label_visibility="collapsed")
         
-        # Appliquer les filtres
+        # ===== LIGNE 3: FILTRES AVANCÉS (inline) =====
+        col_roas, col_pot, col_freq = st.columns(3)
+        with col_roas:
+            min_roas = st.number_input("ROAS ≥", min_value=0.0, max_value=50.0, value=0.0, step=0.5, label_visibility="visible")
+        with col_pot:
+            min_potential = st.number_input("Potentiel ≥", min_value=0, max_value=100, value=0, step=5)
+        with col_freq:
+            max_frequency = st.number_input("Frequency ≤", min_value=1.0, max_value=10.0, value=10.0, step=0.5)
+        
+        # ===== APPLIQUER LES FILTRES =====
         filtered_df = df[
             (df['format'].isin(format_filter)) &
             (df['action'].isin(action_filter)) &
@@ -1586,14 +1619,47 @@ def main():
             (df['frequency'] <= max_frequency)
         ]
         
-        # Appliquer la recherche
         if search_query:
             filtered_df = filtered_df[filtered_df['nom'].str.lower().str.contains(search_query.lower())]
         
         # Trier
-        filtered_df = filtered_df.sort_values(sort_by, ascending=(sort_order == "Croissant"))
+        filtered_df = filtered_df.sort_values(sort_by, ascending=(sort_order == "↑ Asc"))
         
-        st.caption(f"{len(filtered_df)} créatives affichées")
+        # ===== LIGNE 4: KPIs DYNAMIQUES =====
+        total_creatives = len(df)
+        filtered_creatives = len(filtered_df)
+        
+        if filtered_creatives > 0:
+            avg_roas = filtered_df['roas'].mean()
+            total_spend = filtered_df['depense'].sum()
+            avg_potential = filtered_df['scale_potential'].mean()
+            avg_trend = filtered_df['trend_score'].mean() if has_daily else 0
+            
+            filtered_scale = len(filtered_df[filtered_df['action'] == 'scale'])
+            filtered_pause = len(filtered_df[filtered_df['action'] == 'pause'])
+        else:
+            avg_roas = 0
+            total_spend = 0
+            avg_potential = 0
+            avg_trend = 0
+            filtered_scale = 0
+            filtered_pause = 0
+        
+        # Afficher les KPIs
+        kpi_cols = st.columns(6)
+        with kpi_cols[0]:
+            st.metric("📊 Créatives", f"{filtered_creatives}/{total_creatives}")
+        with kpi_cols[1]:
+            st.metric("💰 ROAS moy.", f"{avg_roas:.2f}")
+        with kpi_cols[2]:
+            st.metric("💵 Dépense", f"{total_spend:,.0f}€")
+        with kpi_cols[3]:
+            st.metric("🎯 Potentiel moy.", f"{avg_potential:.0f}")
+        with kpi_cols[4]:
+            trend_delta = f"{avg_trend:+.0f}%" if has_daily else "N/A"
+            st.metric("📈 Tendance moy.", trend_delta if has_daily else "-")
+        with kpi_cols[5]:
+            st.metric("🚀 À scaler", f"{filtered_scale}", delta=f"{filtered_pause} pauses" if filtered_pause > 0 else None, delta_color="inverse" if filtered_pause > 0 else "off")
         
         # Fonction pour colorer les grades
         def format_grade(score, variation=0):
@@ -1614,708 +1680,237 @@ def main():
             else:
                 return "⚪ 0%"
         
-        # Préparer le dataframe pour l'affichage
-        display_df = filtered_df.copy()
-        
-        # Colonnes de base (toujours visibles)
-        display_df['Nom'] = display_df['nom']
-        
-        # Tendance formatée
-        if has_daily:
-            display_df['📈 Tendance'] = display_df['trend_score'].apply(format_trend)
+        # ===== TABLEAU PRINCIPAL =====
+        if filtered_creatives == 0:
+            st.warning("⚠️ Aucune créative ne correspond aux filtres. Essayez de les réinitialiser.")
         else:
-            display_df['📈 Tendance'] = "-"
-        
-        # Scores formatés avec grades colorés
-        display_df['💰 Profit'] = display_df.apply(
-            lambda r: format_grade(r['score_profitabilite'], r.get('var_profit', 0)), axis=1
-        )
-        display_df['🚀 Trafic'] = display_df.apply(
-            lambda r: format_grade(r['score_trafic'], r.get('var_trafic', 0)), axis=1
-        )
-        display_df['👁️ Notoriété'] = display_df.apply(
-            lambda r: format_grade(r['score_notoriete'], r.get('var_notoriete', 0)), axis=1
-        )
-        display_df['⭐ Global'] = display_df.apply(
-            lambda r: format_grade(r['score_global'], r.get('var_global', 0)), axis=1
-        )
-        
-        # Métriques formatées
-        display_df['ROAS'] = display_df['roas'].apply(lambda x: f"{x:.2f}" if x > 0 else "-")
-        display_df['CTR %'] = display_df['ctr_lien'].apply(lambda x: f"{x:.2f}%")
-        display_df['Dépense €'] = display_df['depense'].apply(lambda x: f"{x:.2f}€")
-        display_df['Frequency'] = display_df['frequency'].apply(
-            lambda x: f"{'🔴' if x > 3 else '🟡' if x > 2 else '🟢'} {x:.2f}"
-        )
-        # CPMu avec couleur (plus bas = meilleur)
-        cpmu_mean = filtered_df['cpmu'].mean() if 'cpmu' in filtered_df.columns else 0
-        display_df['CPMu €'] = display_df['cpmu'].apply(
-            lambda x: f"{'🟢' if x < cpmu_mean * 0.8 else '🟡' if x < cpmu_mean * 1.5 else '🔴'} {x:.2f}€" if x > 0 else "-"
-        )
-        display_df['Confiance'] = display_df['coefficient_confiance'].apply(
-            lambda x: f"{'🟢' if x >= 0.7 else '🟡' if x >= 0.5 else '🔴'} {x*100:.0f}%"
-        )
-        
-        # Action formatée avec couleur
-        action_format = {
-            'scale': '🚀 Scale', 
-            'test': '⚡ Test', 
-            'monitor': '👁️ Monitor', 
-            'pause': '⏸️ Pause'
-        }
-        display_df['Action'] = display_df['action'].map(action_format)
-        
-        # Construire la liste des colonnes à afficher
-        columns_to_show = ['format', 'Nom', '📈 Tendance']
-        
-        if show_scores:
-            columns_to_show.extend(['💰 Profit', '🚀 Trafic', '👁️ Notoriété', '⭐ Global'])
-        
-        if show_metrics:
-            columns_to_show.extend(['ROAS', 'CTR %', 'CPMu €', 'Dépense €', 'Frequency'])
-        
-        if show_confiance:
-            columns_to_show.append('Confiance')
-        
-        columns_to_show.extend(['scale_potential', 'Action'])
-        
-        final_df = display_df[columns_to_show].copy()
-        
-        # Renommer les colonnes
-        rename_cols = {'format': 'Format', 'scale_potential': 'Potentiel'}
-        final_df = final_df.rename(columns=rename_cols)
-        
-        # Configuration des colonnes pour st.dataframe
-        column_config = {
-            "Format": st.column_config.TextColumn("Format", width=70),
-            "Nom": st.column_config.TextColumn("Nom", width=300),
-            "📈 Tendance": st.column_config.TextColumn("Tendance", width=85),
-            "💰 Profit": st.column_config.TextColumn("Profit", width=100),
-            "🚀 Trafic": st.column_config.TextColumn("Trafic", width=100),
-            "👁️ Notoriété": st.column_config.TextColumn("Notoriété", width=100),
-            "⭐ Global": st.column_config.TextColumn("Global", width=100),
-            "ROAS": st.column_config.TextColumn("ROAS", width=65),
-            "CTR %": st.column_config.TextColumn("CTR", width=65),
-            "CPMu €": st.column_config.TextColumn("CPMu", width=80),
-            "Dépense €": st.column_config.TextColumn("Dépense", width=75),
-            "Frequency": st.column_config.TextColumn("Freq.", width=75),
-            "Confiance": st.column_config.TextColumn("Conf.", width=75),
-            "Potentiel": st.column_config.ProgressColumn(
-                "Potentiel",
-                format="%d",
-                min_value=0,
-                max_value=100,
-                width=90
-            ),
-            "Action": st.column_config.TextColumn("Action", width=90),
-        }
-        
-        # Fonction pour colorer les lignes selon l'action
-        def highlight_rows(row):
-            action = filtered_df.iloc[row.name]['action'] if row.name < len(filtered_df) else 'monitor'
-            colors = {
-                'scale': 'background-color: #ECFDF5',  # Vert clair
-                'test': 'background-color: #EFF6FF',   # Bleu clair
-                'monitor': 'background-color: #FFFBEB', # Jaune clair
-                'pause': 'background-color: #FEF2F2'   # Rouge clair
+            # Préparer le dataframe pour l'affichage
+            display_df = filtered_df.copy()
+            
+            # Colonnes de base
+            display_df['Nom'] = display_df['nom']
+            
+            # Tendance formatée
+            if has_daily:
+                display_df['Tend.'] = display_df['trend_score'].apply(format_trend)
+            else:
+                display_df['Tend.'] = "-"
+            
+            # Scores formatés avec grades colorés
+            display_df['Profit'] = display_df.apply(
+                lambda r: format_grade(r['score_profitabilite'], r.get('var_profit', 0)), axis=1
+            )
+            display_df['Trafic'] = display_df.apply(
+                lambda r: format_grade(r['score_trafic'], r.get('var_trafic', 0)), axis=1
+            )
+            display_df['Notoriété'] = display_df.apply(
+                lambda r: format_grade(r['score_notoriete'], r.get('var_notoriete', 0)), axis=1
+            )
+            display_df['Global'] = display_df.apply(
+                lambda r: format_grade(r['score_global'], r.get('var_global', 0)), axis=1
+            )
+            
+            # Métriques formatées
+            display_df['ROAS'] = display_df['roas'].apply(lambda x: f"{x:.2f}" if x > 0 else "-")
+            display_df['CTR'] = display_df['ctr_lien'].apply(lambda x: f"{x:.2f}%")
+            display_df['Dépense'] = display_df['depense'].apply(lambda x: f"{x:.0f}€")
+            display_df['Freq.'] = display_df['frequency'].apply(
+                lambda x: f"{'🔴' if x > 3 else '🟡' if x > 2 else '🟢'} {x:.2f}"
+            )
+            # CPMu avec couleur (plus bas = meilleur)
+            cpmu_mean = filtered_df['cpmu'].mean() if 'cpmu' in filtered_df.columns and len(filtered_df) > 0 else 0
+            display_df['CPMu'] = display_df['cpmu'].apply(
+                lambda x: f"{'🟢' if x < cpmu_mean * 0.8 else '🟡' if x < cpmu_mean * 1.5 else '🔴'} {x:.2f}€" if x > 0 else "-"
+            )
+            display_df['Conf.'] = display_df['coefficient_confiance'].apply(
+                lambda x: f"{'🟢' if x >= 0.7 else '🟡' if x >= 0.5 else '🔴'} {x*100:.0f}%"
+            )
+            
+            # Action formatée
+            action_icons = {'scale': '🚀', 'test': '⚡', 'monitor': '👁️', 'pause': '⏸️'}
+            display_df['Act.'] = display_df['action'].map(action_icons)
+            
+            # Définir les colonnes selon le mode de vue
+            if view_mode == 'complete':
+                columns_to_show = ['format', 'Nom', 'Tend.', 'Profit', 'Trafic', 'Notoriété', 'Global', 'ROAS', 'CTR', 'CPMu', 'Dépense', 'Freq.', 'scale_potential', 'Act.']
+            elif view_mode == 'scores':
+                columns_to_show = ['format', 'Nom', 'Tend.', 'Profit', 'Trafic', 'Notoriété', 'Global', 'Conf.', 'scale_potential', 'Act.']
+            elif view_mode == 'metrics':
+                columns_to_show = ['format', 'Nom', 'Tend.', 'ROAS', 'CTR', 'CPMu', 'Dépense', 'Freq.', 'scale_potential', 'Act.']
+            else:  # minimal
+                columns_to_show = ['format', 'Nom', 'Global', 'ROAS', 'scale_potential', 'Act.']
+            
+            final_df = display_df[columns_to_show].copy()
+            
+            # Renommer les colonnes
+            rename_cols = {'format': 'Fmt', 'scale_potential': 'Pot.'}
+            final_df = final_df.rename(columns=rename_cols)
+            
+            # Configuration dynamique des colonnes
+            column_config = {
+                "Fmt": st.column_config.TextColumn("Fmt", width=55),
+                "Nom": st.column_config.TextColumn("Nom", width=280),
+                "Tend.": st.column_config.TextColumn("Tend.", width=75),
+                "Profit": st.column_config.TextColumn("Profit", width=95),
+                "Trafic": st.column_config.TextColumn("Trafic", width=95),
+                "Notoriété": st.column_config.TextColumn("Notoriété", width=95),
+                "Global": st.column_config.TextColumn("Global", width=95),
+                "ROAS": st.column_config.TextColumn("ROAS", width=60),
+                "CTR": st.column_config.TextColumn("CTR", width=65),
+                "CPMu": st.column_config.TextColumn("CPMu", width=80),
+                "Dépense": st.column_config.TextColumn("Dép.", width=65),
+                "Freq.": st.column_config.TextColumn("Freq.", width=70),
+                "Conf.": st.column_config.TextColumn("Conf.", width=70),
+                "Pot.": st.column_config.ProgressColumn("Pot.", format="%d", min_value=0, max_value=100, width=70),
+                "Act.": st.column_config.TextColumn("", width=35),
             }
-            return [colors.get(action, '')] * len(row)
-        
-        # Afficher le tableau
-        st.dataframe(
-            final_df,
-            use_container_width=True,
-            height=600,
-            column_config=column_config,
-            hide_index=True
-        )
-        
-        # Légende des couleurs
-        st.markdown("""
-        <div style="display: flex; gap: 20px; margin-top: 10px; font-size: 12px;">
-            <span>🟢 A/B = Excellent</span>
-            <span>🟡 C = Moyen</span>
-            <span>🟠 D = Faible</span>
-            <span>🔴 F = Critique</span>
-            <span style="margin-left: 20px;">|</span>
-            <span>🚀 Scale</span>
-            <span>⚡ Test</span>
-            <span>👁️ Monitor</span>
-            <span>⏸️ Pause</span>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.divider()
-        
-        # ===== TABLEAUX DÉTAILLÉS PAR SCORE =====
-        st.subheader("📊 Détail des scores par dimension")
-        
-        # Fonctions de formatage avec couleurs
-        def format_metric_color(value, thresholds, inverse=False, suffix="", decimals=2):
-            """Formate une métrique avec couleur selon seuils. inverse=True si une valeur basse est meilleure."""
-            if pd.isna(value) or value == 0:
-                return "⚪ -"
             
-            low, mid, high = thresholds
+            # Calculer la hauteur dynamique
+            table_height = min(450, max(200, 40 + len(final_df) * 35))
             
-            if inverse:
-                if value <= low:
-                    color = "🟢"
-                elif value <= mid:
-                    color = "🟡"
-                elif value <= high:
-                    color = "🟠"
-                else:
-                    color = "🔴"
-            else:
-                if value >= high:
-                    color = "🟢"
-                elif value >= mid:
-                    color = "🟡"
-                elif value >= low:
-                    color = "🟠"
-                else:
-                    color = "🔴"
-            
-            if decimals == 0:
-                return f"{color} {value:,.0f}{suffix}"
-            else:
-                return f"{color} {value:.{decimals}f}{suffix}"
-        
-        def format_score_color(score):
-            """Formate un score avec couleur et grade."""
-            grade = get_grade(score)
-            if score >= 70:
-                return f"🟢 {score} ({grade})"
-            elif score >= 60:
-                return f"🟢 {score} ({grade})"
-            elif score >= 50:
-                return f"🟡 {score} ({grade})"
-            elif score >= 40:
-                return f"🟠 {score} ({grade})"
-            else:
-                return f"🔴 {score} ({grade})"
-        
-        # Calculer les statistiques pour les seuils dynamiques
-        roas_q25, roas_q50, roas_q75 = filtered_df['roas'].quantile([0.25, 0.5, 0.75])
-        cpa_q25, cpa_q50, cpa_q75 = filtered_df[filtered_df['cpa_calc'] > 0]['cpa_calc'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cpa_calc'] > 0]) > 0 else (10, 20, 40)
-        cvr_q25, cvr_q50, cvr_q75 = filtered_df[filtered_df['cvr'] > 0]['cvr'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cvr'] > 0]) > 0 else (1, 2, 5)
-        
-        ctr_q25, ctr_q50, ctr_q75 = filtered_df['ctr_lien'].quantile([0.25, 0.5, 0.75])
-        cpc_q25, cpc_q50, cpc_q75 = filtered_df[filtered_df['cpc_lien'] > 0]['cpc_lien'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cpc_lien'] > 0]) > 0 else (0.2, 0.5, 1)
-        clics_q25, clics_q50, clics_q75 = filtered_df['clics_lien'].quantile([0.25, 0.5, 0.75])
-        
-        cpm_q25, cpm_q50, cpm_q75 = filtered_df[filtered_df['cpm'] > 0]['cpm'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cpm'] > 0]) > 0 else (2, 5, 10)
-        reach_q25, reach_q50, reach_q75 = filtered_df['reach'].quantile([0.25, 0.5, 0.75])
-        
-        # Onglets pour les 3 tableaux
-        tab_profit, tab_trafic, tab_notoriete, tab_tendance = st.tabs(["💰 Score Profit", "🚀 Score Trafic", "👁️ Score Notoriété", "📈 Score Tendance"])
-        
-        # ===== TABLEAU PROFIT =====
-        with tab_profit:
-            st.markdown("""
-            **Composition du score Profit :** ROAS (45%) + CPA inversé (35%) + CVR (20%)
-            
-            *Plus le ROAS et le CVR sont élevés, meilleur est le score. Plus le CPA est bas, meilleur est le score.*
-            """)
-            
-            profit_df = filtered_df[['nom', 'format', 'roas', 'cpa_calc', 'cvr', 'achats', 'depense', 'score_profitabilite', 'action']].copy()
-            
-            # Formater les colonnes
-            profit_df['Nom'] = profit_df['nom']
-            profit_df['ROAS'] = profit_df['roas'].apply(
-                lambda x: format_metric_color(x, (roas_q25, roas_q50, roas_q75), inverse=False, decimals=2)
-            )
-            profit_df['CPA €'] = profit_df['cpa_calc'].apply(
-                lambda x: format_metric_color(x, (cpa_q25, cpa_q50, cpa_q75), inverse=True, suffix="€", decimals=2)
-            )
-            profit_df['CVR %'] = profit_df['cvr'].apply(
-                lambda x: format_metric_color(x, (cvr_q25, cvr_q50, cvr_q75), inverse=False, suffix="%", decimals=2)
-            )
-            profit_df['Achats'] = profit_df['achats'].apply(lambda x: f"{x:,.0f}")
-            profit_df['Dépense €'] = profit_df['depense'].apply(lambda x: f"{x:.2f}€")
-            profit_df['Score'] = profit_df['score_profitabilite'].apply(format_score_color)
-            
-            action_format = {'scale': '🚀', 'test': '⚡', 'monitor': '👁️', 'pause': '⏸️'}
-            profit_df['Act.'] = profit_df['action'].map(action_format)
-            
-            # Calculer la hauteur dynamique (35px par ligne + 40px header)
-            table_height = min(2000, 40 + len(profit_df) * 35)
-            
-            # Afficher
+            # Afficher le tableau
             st.dataframe(
-                profit_df[['format', 'Nom', 'ROAS', 'CPA €', 'CVR %', 'Achats', 'Dépense €', 'Score', 'Act.']],
+                final_df,
                 use_container_width=True,
                 height=table_height,
-                column_config={
-                    "format": st.column_config.TextColumn("Format", width=60),
-                    "Nom": st.column_config.TextColumn("Nom", width=350),
-                    "ROAS": st.column_config.TextColumn("ROAS", width=80),
-                    "CPA €": st.column_config.TextColumn("CPA", width=90),
-                    "CVR %": st.column_config.TextColumn("CVR", width=90),
-                    "Achats": st.column_config.TextColumn("Achats", width=70),
-                    "Dépense €": st.column_config.TextColumn("Dépense", width=80),
-                    "Score": st.column_config.TextColumn("Score", width=100),
-                    "Act.": st.column_config.TextColumn("", width=40),
-                },
+                column_config=column_config,
                 hide_index=True
             )
-            
-            # Légende
-            st.caption("🟢 Excellent (top 25%) | 🟡 Bon (médiane) | 🟠 Moyen (bottom 25%) | 🔴 Faible | *CPA : plus bas = meilleur*")
         
-        # ===== TABLEAU TRAFIC =====
-        with tab_trafic:
-            st.markdown("""
-            **Composition du score Trafic :** CTR (50%) + CPC inversé (30%) + Clics (20%)
-            
-            *Plus le CTR et les clics sont élevés, meilleur est le score. Plus le CPC est bas, meilleur est le score.*
-            """)
-            
-            trafic_df = filtered_df[['nom', 'format', 'ctr_lien', 'cpc_lien', 'clics_lien', 'impressions', 'score_trafic', 'action']].copy()
-            
-            # Formater les colonnes
-            trafic_df['Nom'] = trafic_df['nom']
-            trafic_df['CTR %'] = trafic_df['ctr_lien'].apply(
-                lambda x: format_metric_color(x, (ctr_q25, ctr_q50, ctr_q75), inverse=False, suffix="%", decimals=2)
-            )
-            trafic_df['CPC €'] = trafic_df['cpc_lien'].apply(
-                lambda x: format_metric_color(x, (cpc_q25, cpc_q50, cpc_q75), inverse=True, suffix="€", decimals=2)
-            )
-            trafic_df['Clics'] = trafic_df['clics_lien'].apply(
-                lambda x: format_metric_color(x, (clics_q25, clics_q50, clics_q75), inverse=False, decimals=0)
-            )
-            trafic_df['Impressions'] = trafic_df['impressions'].apply(lambda x: f"{x:,.0f}")
-            trafic_df['Score'] = trafic_df['score_trafic'].apply(format_score_color)
-            
-            action_format = {'scale': '🚀', 'test': '⚡', 'monitor': '👁️', 'pause': '⏸️'}
-            trafic_df['Act.'] = trafic_df['action'].map(action_format)
-            
-            # Calculer la hauteur dynamique (35px par ligne + 40px header)
-            table_height = min(2000, 40 + len(trafic_df) * 35)
-            
-            # Afficher
-            st.dataframe(
-                trafic_df[['format', 'Nom', 'CTR %', 'CPC €', 'Clics', 'Impressions', 'Score', 'Act.']],
-                use_container_width=True,
-                height=table_height,
-                column_config={
-                    "format": st.column_config.TextColumn("Format", width=60),
-                    "Nom": st.column_config.TextColumn("Nom", width=350),
-                    "CTR %": st.column_config.TextColumn("CTR", width=90),
-                    "CPC €": st.column_config.TextColumn("CPC", width=90),
-                    "Clics": st.column_config.TextColumn("Clics", width=90),
-                    "Impressions": st.column_config.TextColumn("Impr.", width=90),
-                    "Score": st.column_config.TextColumn("Score", width=100),
-                    "Act.": st.column_config.TextColumn("", width=40),
-                },
-                hide_index=True
-            )
-            
-            # Légende
-            st.caption("🟢 Excellent (top 25%) | 🟡 Bon (médiane) | 🟠 Moyen (bottom 25%) | 🔴 Faible | *CPC : plus bas = meilleur*")
+        # ===== BOUTONS D'ACTION =====
+        col_export, col_scores = st.columns([1, 1])
+        with col_export:
+            if filtered_creatives > 0:
+                st.download_button(
+                    "📥 Exporter CSV",
+                    data=filtered_df.to_csv(index=False).encode('utf-8'),
+                    file_name=f"meta_ads_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    mime='text/csv',
+                    use_container_width=True
+                )
         
-        # ===== TABLEAU NOTORIÉTÉ =====
-        with tab_notoriete:
-            st.markdown("""
-            **Composition du score Notoriété :** CPMu inversé (50%) + Couverture (50%)
-            
-            *CPMu = Coût pour 1000 personnes uniques. Plus la couverture est élevée et le CPMu bas, meilleur est le score.*
-            """)
-            
-            # Calculer les quartiles pour CPMu
-            cpmu_q25, cpmu_q50, cpmu_q75 = filtered_df[filtered_df['cpmu'] > 0]['cpmu'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cpmu'] > 0]) > 0 else (2, 5, 10)
-            
-            notoriete_df = filtered_df[['nom', 'format', 'cpmu', 'cpm', 'reach', 'impressions', 'frequency', 'score_notoriete', 'action']].copy()
-            
-            # Formater les colonnes
-            notoriete_df['Nom'] = notoriete_df['nom']
-            notoriete_df['CPMu €'] = notoriete_df['cpmu'].apply(
-                lambda x: format_metric_color(x, (cpmu_q25, cpmu_q50, cpmu_q75), inverse=True, suffix="€", decimals=2)
-            )
-            notoriete_df['CPM €'] = notoriete_df['cpm'].apply(
-                lambda x: format_metric_color(x, (cpm_q25, cpm_q50, cpm_q75), inverse=True, suffix="€", decimals=2)
-            )
-            notoriete_df['Couverture'] = notoriete_df['reach'].apply(
-                lambda x: format_metric_color(x, (reach_q25, reach_q50, reach_q75), inverse=False, decimals=0)
-            )
-            notoriete_df['Impressions'] = notoriete_df['impressions'].apply(lambda x: f"{x:,.0f}")
-            notoriete_df['Frequency'] = notoriete_df['frequency'].apply(
-                lambda x: f"{'🟢' if x < 2 else '🟡' if x < 3 else '🔴'} {x:.2f}"
-            )
-            notoriete_df['Score'] = notoriete_df['score_notoriete'].apply(format_score_color)
-            
-            action_format = {'scale': '🚀', 'test': '⚡', 'monitor': '👁️', 'pause': '⏸️'}
-            notoriete_df['Act.'] = notoriete_df['action'].map(action_format)
-            
-            # Calculer la hauteur dynamique (35px par ligne + 40px header)
-            table_height = min(2000, 40 + len(notoriete_df) * 35)
-            
-            # Afficher
-            st.dataframe(
-                notoriete_df[['format', 'Nom', 'CPMu €', 'CPM €', 'Couverture', 'Impressions', 'Frequency', 'Score', 'Act.']],
-                use_container_width=True,
-                height=table_height,
-                column_config={
-                    "format": st.column_config.TextColumn("Format", width=60),
-                    "Nom": st.column_config.TextColumn("Nom", width=300),
-                    "CPMu €": st.column_config.TextColumn("CPMu (50%)", width=100),
-                    "CPM €": st.column_config.TextColumn("CPM", width=85),
-                    "Couverture": st.column_config.TextColumn("Couverture (50%)", width=120),
-                    "Impressions": st.column_config.TextColumn("Impr.", width=80),
-                    "Frequency": st.column_config.TextColumn("Freq.", width=75),
-                    "Score": st.column_config.TextColumn("Score", width=100),
-                    "Act.": st.column_config.TextColumn("", width=40),
-                },
-                hide_index=True
-            )
-            
-            # Légende
-            st.caption("🟢 Excellent (top 25%) | 🟡 Bon (médiane) | 🟠 Moyen (bottom 25%) | 🔴 Faible | *CPMu/CPM : plus bas = meilleur* | *Frequency : <2 🟢, 2-3 🟡, >3 🔴*")
-        
-        # ===== TABLEAU TENDANCE =====
-        with tab_tendance:
-            st.markdown("""
-            **Composition du score Tendance :** Δ CTR (40%) + Δ CPC inversé (25%) + Δ CPM inversé (20%) + Δ Impressions (15%)
-            
-            *Comparaison 7 derniers jours vs 7 jours précédents. Une hausse du CTR/Impressions est positive, une hausse du CPC/CPM est négative.*
-            """)
-            
-            if not has_daily:
-                st.warning("⚠️ Chargez les données quotidiennes pour voir les tendances.")
-            else:
-                tendance_df = filtered_df[['nom', 'format', 'trend_ctr', 'trend_cpm', 'trend_score', 'action']].copy()
-                
-                # Ajouter les autres métriques de tendance depuis le dict trends
-                tendance_df['trend_cpc'] = tendance_df['nom'].apply(lambda x: trends.get(x, {}).get('cpc', 0))
-                tendance_df['trend_impr'] = tendance_df['nom'].apply(lambda x: trends.get(x, {}).get('impressions', 0))
-                
-                # Fonction pour formater les variations avec couleur
-                def format_trend_metric(value, inverse=False):
-                    """Formate une variation avec couleur. inverse=True si une hausse est négative."""
+        # ===== SCORES DÉTAILLÉS (EXPANDER FERMÉ) =====
+        with st.expander("📊 Détail des scores par dimension", expanded=False):
+            if filtered_creatives > 0:
+                # Fonctions de formatage
+                def format_metric_color(value, thresholds, inverse=False, suffix="", decimals=2):
                     if pd.isna(value) or value == 0:
-                        return "⚪ 0%"
-                    
+                        return "⚪ -"
+                    low, mid, high = thresholds
                     if inverse:
-                        # Pour CPC et CPM : baisse = bon (vert), hausse = mauvais (rouge)
-                        if value <= -20:
-                            color = "🟢"
-                        elif value <= -5:
-                            color = "🟢"
-                        elif value <= 5:
-                            color = "⚪"
-                        elif value <= 20:
-                            color = "🟠"
-                        else:
-                            color = "🔴"
+                        color = "🟢" if value <= low else "🟡" if value <= mid else "🟠" if value <= high else "🔴"
                     else:
-                        # Pour CTR et Impressions : hausse = bon (vert), baisse = mauvais (rouge)
-                        if value >= 20:
-                            color = "🟢"
-                        elif value >= 5:
-                            color = "🟢"
-                        elif value >= -5:
-                            color = "⚪"
-                        elif value >= -20:
-                            color = "🟠"
-                        else:
-                            color = "🔴"
+                        color = "🟢" if value >= high else "🟡" if value >= mid else "🟠" if value >= low else "🔴"
+                    return f"{color} {value:.{decimals}f}{suffix}" if decimals > 0 else f"{color} {value:,.0f}{suffix}"
+                
+                def format_score_color(score):
+                    grade = get_grade(score)
+                    color = "🟢" if score >= 60 else "🟡" if score >= 50 else "🟠" if score >= 40 else "🔴"
+                    return f"{color} {score} ({grade})"
+                
+                # Quartiles
+                roas_q25, roas_q50, roas_q75 = filtered_df['roas'].quantile([0.25, 0.5, 0.75])
+                ctr_q25, ctr_q50, ctr_q75 = filtered_df['ctr_lien'].quantile([0.25, 0.5, 0.75])
+                cpm_q25, cpm_q50, cpm_q75 = filtered_df[filtered_df['cpm'] > 0]['cpm'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cpm'] > 0]) > 0 else (2, 5, 10)
+                cpmu_q25, cpmu_q50, cpmu_q75 = filtered_df[filtered_df['cpmu'] > 0]['cpmu'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cpmu'] > 0]) > 0 else (2, 5, 10)
+                reach_q25, reach_q50, reach_q75 = filtered_df['reach'].quantile([0.25, 0.5, 0.75])
+                
+                tab_profit, tab_trafic, tab_notoriete = st.tabs(["💰 Profit", "🚀 Trafic", "👁️ Notoriété"])
+                
+                with tab_profit:
+                    st.caption("**Score Profit** = ROAS (45%) + CPA inversé (35%) + CVR (20%)")
+                    cpa_q25, cpa_q50, cpa_q75 = filtered_df[filtered_df['cpa_calc'] > 0]['cpa_calc'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cpa_calc'] > 0]) > 0 else (10, 20, 40)
+                    cvr_q25, cvr_q50, cvr_q75 = filtered_df[filtered_df['cvr'] > 0]['cvr'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cvr'] > 0]) > 0 else (1, 2, 5)
                     
-                    sign = "+" if value > 0 else ""
-                    return f"{color} {sign}{value:.0f}%"
+                    profit_df = filtered_df[['nom', 'format', 'roas', 'cpa_calc', 'cvr', 'achats', 'depense', 'score_profitabilite']].copy()
+                    profit_df['ROAS'] = profit_df['roas'].apply(lambda x: format_metric_color(x, (roas_q25, roas_q50, roas_q75), inverse=False, decimals=2))
+                    profit_df['CPA'] = profit_df['cpa_calc'].apply(lambda x: format_metric_color(x, (cpa_q25, cpa_q50, cpa_q75), inverse=True, suffix="€", decimals=2))
+                    profit_df['CVR'] = profit_df['cvr'].apply(lambda x: format_metric_color(x, (cvr_q25, cvr_q50, cvr_q75), inverse=False, suffix="%", decimals=2))
+                    profit_df['Score'] = profit_df['score_profitabilite'].apply(format_score_color)
+                    st.dataframe(profit_df[['format', 'nom', 'ROAS', 'CPA', 'CVR', 'achats', 'Score']], use_container_width=True, height=min(300, 40 + len(profit_df) * 35), hide_index=True)
                 
-                def format_trend_score(score):
-                    """Formate le score de tendance avec couleur."""
-                    if score >= 20:
-                        return f"🟢 +{score:.0f} (Excellent)"
-                    elif score >= 5:
-                        return f"🟢 +{score:.0f} (Bon)"
-                    elif score >= -5:
-                        return f"⚪ {score:+.0f} (Stable)"
-                    elif score >= -20:
-                        return f"🟠 {score:.0f} (Baisse)"
-                    else:
-                        return f"🔴 {score:.0f} (Chute)"
+                with tab_trafic:
+                    st.caption("**Score Trafic** = CTR (50%) + CPC inversé (30%) + Clics (20%)")
+                    cpc_q25, cpc_q50, cpc_q75 = filtered_df[filtered_df['cpc_lien'] > 0]['cpc_lien'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cpc_lien'] > 0]) > 0 else (0.2, 0.5, 1)
+                    clics_q25, clics_q50, clics_q75 = filtered_df['clics_lien'].quantile([0.25, 0.5, 0.75])
+                    
+                    trafic_df = filtered_df[['nom', 'format', 'ctr_lien', 'cpc_lien', 'clics_lien', 'impressions', 'score_trafic']].copy()
+                    trafic_df['CTR'] = trafic_df['ctr_lien'].apply(lambda x: format_metric_color(x, (ctr_q25, ctr_q50, ctr_q75), inverse=False, suffix="%", decimals=2))
+                    trafic_df['CPC'] = trafic_df['cpc_lien'].apply(lambda x: format_metric_color(x, (cpc_q25, cpc_q50, cpc_q75), inverse=True, suffix="€", decimals=2))
+                    trafic_df['Clics'] = trafic_df['clics_lien'].apply(lambda x: format_metric_color(x, (clics_q25, clics_q50, clics_q75), inverse=False, decimals=0))
+                    trafic_df['Score'] = trafic_df['score_trafic'].apply(format_score_color)
+                    st.dataframe(trafic_df[['format', 'nom', 'CTR', 'CPC', 'Clics', 'Score']], use_container_width=True, height=min(300, 40 + len(trafic_df) * 35), hide_index=True)
                 
-                # Formater les colonnes
-                tendance_df['Nom'] = tendance_df['nom']
-                tendance_df['Δ CTR'] = tendance_df['trend_ctr'].apply(lambda x: format_trend_metric(x, inverse=False))
-                tendance_df['Δ CPC'] = tendance_df['trend_cpc'].apply(lambda x: format_trend_metric(x, inverse=True))
-                tendance_df['Δ CPM'] = tendance_df['trend_cpm'].apply(lambda x: format_trend_metric(x, inverse=True))
-                tendance_df['Δ Impr.'] = tendance_df['trend_impr'].apply(lambda x: format_trend_metric(x, inverse=False))
-                tendance_df['Score'] = tendance_df['trend_score'].apply(format_trend_score)
-                
-                action_format = {'scale': '🚀', 'test': '⚡', 'monitor': '👁️', 'pause': '⏸️'}
-                tendance_df['Act.'] = tendance_df['action'].map(action_format)
-                
-                # Trier par score de tendance
-                tendance_df = tendance_df.sort_values('trend_score', ascending=False)
-                
-                # Calculer la hauteur dynamique
-                table_height = min(2000, 40 + len(tendance_df) * 35)
-                
-                # Afficher
-                st.dataframe(
-                    tendance_df[['format', 'Nom', 'Δ CTR', 'Δ CPC', 'Δ CPM', 'Δ Impr.', 'Score', 'Act.']],
-                    use_container_width=True,
-                    height=table_height,
-                    column_config={
-                        "format": st.column_config.TextColumn("Format", width=60),
-                        "Nom": st.column_config.TextColumn("Nom", width=350),
-                        "Δ CTR": st.column_config.TextColumn("Δ CTR (40%)", width=100),
-                        "Δ CPC": st.column_config.TextColumn("Δ CPC (25%)", width=100),
-                        "Δ CPM": st.column_config.TextColumn("Δ CPM (20%)", width=100),
-                        "Δ Impr.": st.column_config.TextColumn("Δ Impr. (15%)", width=100),
-                        "Score": st.column_config.TextColumn("Score Tendance", width=130),
-                        "Act.": st.column_config.TextColumn("", width=40),
-                    },
-                    hide_index=True
+                with tab_notoriete:
+                    st.caption("**Score Notoriété** = CPMu inversé (50%) + Couverture (50%)")
+                    notoriete_df = filtered_df[['nom', 'format', 'cpmu', 'cpm', 'reach', 'frequency', 'score_notoriete']].copy()
+                    notoriete_df['CPMu'] = notoriete_df['cpmu'].apply(lambda x: format_metric_color(x, (cpmu_q25, cpmu_q50, cpmu_q75), inverse=True, suffix="€", decimals=2))
+                    notoriete_df['CPM'] = notoriete_df['cpm'].apply(lambda x: format_metric_color(x, (cpm_q25, cpm_q50, cpm_q75), inverse=True, suffix="€", decimals=2))
+                    notoriete_df['Reach'] = notoriete_df['reach'].apply(lambda x: format_metric_color(x, (reach_q25, reach_q50, reach_q75), inverse=False, decimals=0))
+                    notoriete_df['Score'] = notoriete_df['score_notoriete'].apply(format_score_color)
+                    st.dataframe(notoriete_df[['format', 'nom', 'CPMu', 'CPM', 'Reach', 'Score']], use_container_width=True, height=min(300, 40 + len(notoriete_df) * 35), hide_index=True)
+        
+        # ===== DÉTAIL CRÉATIVE (COMPACT) =====
+        if filtered_creatives > 0:
+            with st.expander("🔍 Détail d'une créative", expanded=False):
+                selected_creative = st.selectbox(
+                    "Sélectionner une créative",
+                    options=filtered_df['nom'].tolist(),
+                    format_func=lambda x: f"{filtered_df[filtered_df['nom']==x]['format'].values[0]} | {x[:50]}...",
+                    label_visibility="collapsed"
                 )
                 
-                # Légende
-                st.caption("🟢 Amélioration | ⚪ Stable (-5% à +5%) | 🟠 Légère baisse | 🔴 Forte baisse | *CPC/CPM : baisse = 🟢, hausse = 🔴*")
-        
-        st.divider()
-        
-        # Détail d'une créative sélectionnée
-        st.subheader("🔍 Détail créative")
-        selected_creative = st.selectbox(
-            "Sélectionner une créative pour voir le détail",
-            options=filtered_df['nom'].tolist(),
-            format_func=lambda x: f"{filtered_df[filtered_df['nom']==x]['format'].values[0]} | {x}"
-        )
-        
-        if selected_creative:
-            row = filtered_df[filtered_df['nom'] == selected_creative].iloc[0]
-            
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.markdown("**📊 Métriques**")
-                st.write(f"Impressions: {row['impressions']:,.0f}")
-                st.write(f"Clics: {row['clics_lien']:,.0f}")
-                st.write(f"CTR: {row['ctr_lien']:.2f}%")
-                st.write(f"CPC: {row['cpc_lien']:.2f}€")
-                st.write(f"CPM: {row['cpm']:.2f}€")
-            
-            with col2:
-                st.markdown("**💰 Conversions**")
-                st.write(f"Achats: {row['achats']:,.0f}")
-                st.write(f"ROAS: {row['roas']:.2f}")
-                st.write(f"Dépense: {row['depense']:.2f}€")
-                st.write(f"Frequency: {row['frequency']:.2f}")
-                st.write(f"Confiance: {row['coefficient_confiance']*100:.0f}%")
-            
-            with col3:
-                st.markdown("**🎯 Scores**")
-                st.write(f"Profit: {row['score_profitabilite']} ({get_grade(row['score_profitabilite'])})")
-                st.write(f"Trafic: {row['score_trafic']} ({get_grade(row['score_trafic'])})")
-                st.write(f"Notoriété: {row['score_notoriete']} ({get_grade(row['score_notoriete'])})")
-                st.write(f"Global: {row['score_global']} ({get_grade(row['score_global'])})")
-                st.write(f"**Potentiel: {row['scale_potential']}**")
-            
-            # Graphique d'évolution multi-métriques
-            if has_daily and selected_creative in sparklines:
-                st.markdown("---")
-                st.markdown("**📈 Évolution des métriques**")
-                
-                # Sélection de la plage de dates
-                col_date1, col_date2 = st.columns([1, 2])
-                
-                with col_date1:
-                    date_range_option = st.selectbox(
-                        "Plage de dates",
-                        options=["7 derniers jours", "14 derniers jours", "30 derniers jours", "Personnalisé"],
-                        index=1
-                    )
-                
-                # Récupérer toutes les données disponibles
-                sparkline_data_full = sparklines[selected_creative]
-                all_dates = [d.get('date', '') for d in sparkline_data_full]
-                
-                if all_dates:
-                    min_date = datetime.strptime(min(all_dates), '%Y-%m-%d').date()
-                    max_date = datetime.strptime(max(all_dates), '%Y-%m-%d').date()
+                if selected_creative:
+                    row = filtered_df[filtered_df['nom'] == selected_creative].iloc[0]
                     
-                    # Déterminer les dates de début et fin selon l'option choisie
-                    if date_range_option == "7 derniers jours":
-                        start_date = max_date - timedelta(days=6)
-                        end_date = max_date
-                    elif date_range_option == "14 derniers jours":
-                        start_date = max_date - timedelta(days=13)
-                        end_date = max_date
-                    elif date_range_option == "30 derniers jours":
-                        start_date = max_date - timedelta(days=29)
-                        end_date = max_date
-                    else:  # Personnalisé
-                        with col_date2:
-                            date_col1, date_col2 = st.columns(2)
-                            with date_col1:
-                                start_date = st.date_input(
-                                    "Date de début",
-                                    value=max_date - timedelta(days=13),
-                                    min_value=min_date,
-                                    max_value=max_date
-                                )
-                            with date_col2:
-                                end_date = st.date_input(
-                                    "Date de fin",
-                                    value=max_date,
-                                    min_value=min_date,
-                                    max_value=max_date
-                                )
+                    # 3 colonnes compactes
+                    col1, col2, col3 = st.columns(3)
                     
-                    # Filtrer les données selon la plage sélectionnée
-                    sparkline_data = [
-                        d for d in sparkline_data_full 
-                        if start_date <= datetime.strptime(d.get('date', '2000-01-01'), '%Y-%m-%d').date() <= end_date
-                    ]
+                    with col1:
+                        st.markdown("**📊 Métriques**")
+                        st.caption(f"Impressions: {row['impressions']:,.0f}")
+                        st.caption(f"Clics: {row['clics_lien']:,.0f}")
+                        st.caption(f"CTR: {row['ctr_lien']:.2f}%")
+                        st.caption(f"CPC: {row['cpc_lien']:.2f}€")
+                        st.caption(f"CPM: {row['cpm']:.2f}€")
+                        st.caption(f"CPMu: {row['cpmu']:.2f}€")
                     
-                    # Afficher la plage sélectionnée
-                    st.caption(f"📅 Du {start_date.strftime('%d/%m/%Y')} au {end_date.strftime('%d/%m/%Y')} ({len(sparkline_data)} jours)")
-                
-                # Sélection des métriques à afficher
-                available_metrics = {
-                    'CTR (%)': 'ctr',
-                    'CPM (€)': 'cpm',
-                    'CPMu (€)': 'cpmu',
-                    'Impressions': 'impressions',
-                    'Dépense (€)': 'depense'
-                }
-                
-                selected_metrics = st.multiselect(
-                    "Sélectionner les métriques à afficher",
-                    options=list(available_metrics.keys()),
-                    default=['CTR (%)'],
-                    help="CPMu = Coût pour 1000 personnes uniques (Dépense/Reach × 1000)"
-                )
-                
-                if selected_metrics and sparkline_data:
+                    with col2:
+                        st.markdown("**💰 Conversions**")
+                        st.caption(f"Achats: {row['achats']:.0f}")
+                        st.caption(f"ROAS: {row['roas']:.2f}")
+                        st.caption(f"Dépense: {row['depense']:.2f}€")
+                        st.caption(f"Frequency: {row['frequency']:.2f}")
+                        st.caption(f"Confiance: {row['coefficient_confiance']*100:.0f}%")
                     
-                    # Créer le graphique
-                    fig = go.Figure()
+                    with col3:
+                        st.markdown("**🎯 Scores**")
+                        st.caption(f"Profit: {row['score_profitabilite']} ({get_grade(row['score_profitabilite'])})")
+                        st.caption(f"Trafic: {row['score_trafic']} ({get_grade(row['score_trafic'])})")
+                        st.caption(f"Notoriété: {row['score_notoriete']} ({get_grade(row['score_notoriete'])})")
+                        st.caption(f"Global: {row['score_global']} ({get_grade(row['score_global'])})")
+                        st.caption(f"**Potentiel: {row['scale_potential']}**")
                     
-                    # Couleurs pour chaque métrique
-                    colors = {
-                        'CTR (%)': '#10B981',
-                        'CPM (€)': '#F59E0B', 
-                        'CPMu (€)': '#EF4444',
-                        'Impressions': '#3B82F6',
-                        'Dépense (€)': '#8B5CF6'
-                    }
-                    
-                    # Vérifier si on a besoin d'un axe secondaire (échelles très différentes)
-                    use_secondary = len(selected_metrics) > 1 and 'Impressions' in selected_metrics
-                    
-                    for metric_label in selected_metrics:
-                        metric_key = available_metrics[metric_label]
-                        values = [d.get(metric_key, 0) for d in sparkline_data]
-                        dates = [d.get('date', '') for d in sparkline_data]
+                    # Graphique évolution (si données quotidiennes)
+                    if has_daily and selected_creative in sparklines:
+                        st.markdown("**📈 Évolution (14 derniers jours)**")
+                        sparkline_data = sparklines[selected_creative][-14:]
                         
-                        # Utiliser axe secondaire pour Impressions si autres métriques sélectionnées
-                        use_y2 = use_secondary and metric_label == 'Impressions'
-                        
-                        fig.add_trace(go.Scatter(
-                            x=dates,
-                            y=values,
-                            mode='lines+markers',
-                            name=metric_label,
-                            line=dict(color=colors.get(metric_label, '#6B7280'), width=2),
-                            marker=dict(size=6),
-                            yaxis='y2' if use_y2 else 'y'
-                        ))
-                    
-                    # Configuration du layout
-                    layout_config = dict(
-                        height=400,
-                        xaxis=dict(
-                            title="Date",
-                            tickangle=45,
-                            showgrid=True,
-                            gridcolor='rgba(0,0,0,0.1)'
-                        ),
-                        yaxis=dict(
-                            title=selected_metrics[0] if len(selected_metrics) == 1 else "Valeur",
-                            showgrid=True,
-                            gridcolor='rgba(0,0,0,0.1)'
-                        ),
-                        legend=dict(
-                            orientation="h",
-                            yanchor="bottom",
-                            y=1.02,
-                            xanchor="left",
-                            x=0
-                        ),
-                        hovermode='x unified',
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        plot_bgcolor='rgba(0,0,0,0)'
-                    )
-                    
-                    # Ajouter axe Y secondaire si nécessaire
-                    if use_secondary:
-                        layout_config['yaxis2'] = dict(
-                            title="Impressions",
-                            overlaying='y',
-                            side='right',
-                            showgrid=False
-                        )
-                    
-                    fig.update_layout(**layout_config)
-                    
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Afficher les variations sur la période sélectionnée
-                    st.markdown("**📊 Variations sur la période**")
-                    var_cols = st.columns(len(selected_metrics))
-                    
-                    for i, metric_label in enumerate(selected_metrics):
-                        metric_key = available_metrics[metric_label]
-                        values = [d.get(metric_key, 0) for d in sparkline_data]
-                        
-                        if len(values) >= 2:
-                            # Calculer la moyenne de la première moitié vs deuxième moitié
-                            mid = len(values) // 2
-                            first_half = [v for v in values[:mid] if v > 0]
-                            second_half = [v for v in values[mid:] if v > 0]
+                        if sparkline_data:
+                            metric_choice = st.selectbox("Métrique", ['CTR (%)', 'CPMu (€)', 'CPM (€)', 'Impressions'], key="detail_metric")
+                            metric_map = {'CTR (%)': 'ctr', 'CPMu (€)': 'cpmu', 'CPM (€)': 'cpm', 'Impressions': 'impressions'}
+                            metric_key = metric_map[metric_choice]
                             
-                            recent = np.mean(second_half) if second_half else 0
-                            previous = np.mean(first_half) if first_half else 0
+                            dates = [d.get('date', '') for d in sparkline_data]
+                            values = [d.get(metric_key, 0) for d in sparkline_data]
                             
-                            if previous > 0:
-                                variation = ((recent - previous) / previous) * 100
-                                with var_cols[i]:
-                                    # CTR et Impressions : hausse = vert, baisse = rouge
-                                    # CPM et Dépense : hausse = rouge, baisse = vert
-                                    delta_color = "normal" if metric_label in ['CTR (%)', 'Impressions'] else "inverse"
-                                    st.metric(
-                                        metric_label,
-                                        f"{recent:.2f}" if metric_key != 'impressions' else f"{recent:,.0f}",
-                                        f"{variation:+.1f}%",
-                                        delta_color=delta_color
-                                    )
-                            else:
-                                with var_cols[i]:
-                                    current_val = np.mean([v for v in values if v > 0]) if any(v > 0 for v in values) else 0
-                                    st.metric(
-                                        metric_label,
-                                        f"{current_val:.2f}" if metric_key != 'impressions' else f"{current_val:,.0f}",
-                                        "N/A"
-                                    )
-                else:
-                    st.info("👆 Sélectionnez au moins une métrique pour voir le graphique")
-            
-            st.info(f"**Recommandation:** {row['recommendation']}")
+                            fig = go.Figure()
+                            fig.add_trace(go.Scatter(x=dates, y=values, mode='lines+markers', line=dict(color='#6366F1', width=2), marker=dict(size=5)))
+                            fig.update_layout(height=200, margin=dict(t=10, b=30, l=40, r=10), xaxis=dict(tickangle=45), showlegend=False)
+                            st.plotly_chart(fig, use_container_width=True)
+                    
+                    st.info(f"**Recommandation:** {row['recommendation']}")
         
-        st.divider()
-        
-        # Export
-        st.download_button(
-            "📥 Exporter CSV",
-            data=filtered_df.to_csv(index=False).encode('utf-8'),
-            file_name=f"meta_ads_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-            mime='text/csv'
-        )
-    
     # ========== TAB 5: Comparateur ==========
     with tab5:
         st.header("Comparateur")
