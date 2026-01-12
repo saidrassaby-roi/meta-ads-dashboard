@@ -4,7 +4,7 @@ Meta Ads Creative Intelligence Dashboard V2.3
 Application de pilotage des créatives publicitaires Meta Ads.
 Tableau avec composants natifs Streamlit pour un affichage fiable.
 
-Auteur: BNB Solutions Digitales
+Auteur: Saïd Rassay
 Version: 2.3
 """
 
@@ -325,17 +325,25 @@ def calculate_trends_from_daily(df_daily, lookback_days=30):
         for d in dates:
             row = df_30j[df_30j['date'].dt.date == d.date()]
             if len(row) > 0 and row.iloc[0].get('impressions', 0) > 0:
+                impressions = float(row.iloc[0].get('impressions', 0))
+                reach = float(row.iloc[0].get('reach', 0))
+                depense = float(row.iloc[0].get('depense', 0))
+                # Calculer CPMu : (dépense / reach) * 1000
+                cpmu = (depense / reach * 1000) if reach > 0 else 0
+                
                 sparkline_data.append({
                     'date': d.strftime('%Y-%m-%d'),
-                    'impressions': float(row.iloc[0].get('impressions', 0)),
+                    'impressions': impressions,
                     'ctr': float(row.iloc[0].get('ctr_lien', 0)),
-                    'depense': float(row.iloc[0].get('depense', 0)),
-                    'cpm': float(row.iloc[0].get('cpm', 0))
+                    'depense': depense,
+                    'cpm': float(row.iloc[0].get('cpm', 0)),
+                    'reach': reach,
+                    'cpmu': cpmu
                 })
             else:
                 sparkline_data.append({
                     'date': d.strftime('%Y-%m-%d'),
-                    'impressions': 0, 'ctr': 0, 'depense': 0, 'cpm': 0
+                    'impressions': 0, 'ctr': 0, 'depense': 0, 'cpm': 0, 'reach': 0, 'cpmu': 0
                 })
         
         sparklines[nom] = sparkline_data
@@ -2170,6 +2178,7 @@ def main():
                 available_metrics = {
                     'CTR (%)': 'ctr',
                     'CPM (€)': 'cpm',
+                    'CPMu (€)': 'cpmu',
                     'Impressions': 'impressions',
                     'Dépense (€)': 'depense'
                 }
@@ -2178,7 +2187,7 @@ def main():
                     "Sélectionner les métriques à afficher",
                     options=list(available_metrics.keys()),
                     default=['CTR (%)'],
-                    help="Vous pouvez sélectionner plusieurs métriques pour les comparer"
+                    help="CPMu = Coût pour 1000 personnes uniques (Dépense/Reach × 1000)"
                 )
                 
                 if selected_metrics and sparkline_data:
@@ -2190,6 +2199,7 @@ def main():
                     colors = {
                         'CTR (%)': '#10B981',
                         'CPM (€)': '#F59E0B', 
+                        'CPMu (€)': '#EF4444',
                         'Impressions': '#3B82F6',
                         'Dépense (€)': '#8B5CF6'
                     }
