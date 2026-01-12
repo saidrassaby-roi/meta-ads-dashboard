@@ -1815,7 +1815,7 @@ def main():
                 cpmu_q25, cpmu_q50, cpmu_q75 = filtered_df[filtered_df['cpmu'] > 0]['cpmu'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cpmu'] > 0]) > 0 else (2, 5, 10)
                 reach_q25, reach_q50, reach_q75 = filtered_df['reach'].quantile([0.25, 0.5, 0.75])
                 
-                tab_profit, tab_trafic, tab_notoriete = st.tabs(["💰 Profit", "🚀 Trafic", "👁️ Notoriété"])
+                tab_profit, tab_trafic, tab_notoriete, tab_tendance = st.tabs(["💰 Profit", "🚀 Trafic", "👁️ Notoriété", "📈 Tendance"])
                 
                 with tab_profit:
                     st.caption("**Score Profit** = ROAS (45%) + CPA inversé (35%) + CVR (20%)")
@@ -1849,6 +1849,46 @@ def main():
                     notoriete_df['Reach'] = notoriete_df['reach'].apply(lambda x: format_metric_color(x, (reach_q25, reach_q50, reach_q75), inverse=False, decimals=0))
                     notoriete_df['Score'] = notoriete_df['score_notoriete'].apply(format_score_color)
                     st.dataframe(notoriete_df[['format', 'nom', 'CPMu', 'CPM', 'Reach', 'Score']], use_container_width=True, height=min(300, 40 + len(notoriete_df) * 35), hide_index=True)
+                
+                with tab_tendance:
+                    if has_daily:
+                        st.caption("**Score Tendance** = Δ CTR (40%) + Δ CPC inversé (25%) + Δ CPM inversé (20%) + Δ Impressions (15%)")
+                        
+                        def format_trend_metric(value, inverse=False):
+                            if pd.isna(value) or value == 0:
+                                return "⚪ 0%"
+                            if inverse:
+                                color = "🟢" if value <= -5 else "⚪" if value <= 5 else "🟠" if value <= 20 else "🔴"
+                            else:
+                                color = "🟢" if value >= 5 else "⚪" if value >= -5 else "🟠" if value >= -20 else "🔴"
+                            return f"{color} {value:+.0f}%"
+                        
+                        def format_trend_score(score):
+                            if score >= 15:
+                                return f"🟢 {score:+.0f} (Excellent)"
+                            elif score >= 5:
+                                return f"🟢 {score:+.0f} (Bon)"
+                            elif score >= -5:
+                                return f"⚪ {score:+.0f} (Stable)"
+                            elif score >= -15:
+                                return f"🟠 {score:+.0f} (Baisse)"
+                            else:
+                                return f"🔴 {score:+.0f} (Chute)"
+                        
+                        tendance_df = filtered_df[['nom', 'format', 'trend_ctr', 'trend_cpm', 'trend_score']].copy()
+                        tendance_df['trend_cpc'] = tendance_df['nom'].apply(lambda x: trends.get(x, {}).get('cpc', 0))
+                        tendance_df['trend_impr'] = tendance_df['nom'].apply(lambda x: trends.get(x, {}).get('impressions', 0))
+                        
+                        tendance_df['Δ CTR'] = tendance_df['trend_ctr'].apply(lambda x: format_trend_metric(x, inverse=False))
+                        tendance_df['Δ CPC'] = tendance_df['trend_cpc'].apply(lambda x: format_trend_metric(x, inverse=True))
+                        tendance_df['Δ CPM'] = tendance_df['trend_cpm'].apply(lambda x: format_trend_metric(x, inverse=True))
+                        tendance_df['Δ Impr.'] = tendance_df['trend_impr'].apply(lambda x: format_trend_metric(x, inverse=False))
+                        tendance_df['Score'] = tendance_df['trend_score'].apply(format_trend_score)
+                        
+                        tendance_df = tendance_df.sort_values('trend_score', ascending=False)
+                        st.dataframe(tendance_df[['format', 'nom', 'Δ CTR', 'Δ CPC', 'Δ CPM', 'Δ Impr.', 'Score']], use_container_width=True, height=min(300, 40 + len(tendance_df) * 35), hide_index=True)
+                    else:
+                        st.info("⚠️ Chargez les données quotidiennes pour voir les tendances.")
         
         # ===== DÉTAIL CRÉATIVE (COMPACT) =====
         if filtered_creatives > 0:
@@ -1856,7 +1896,7 @@ def main():
                 selected_creative = st.selectbox(
                     "Sélectionner une créative",
                     options=filtered_df['nom'].tolist(),
-                    format_func=lambda x: f"{filtered_df[filtered_df['nom']==x]['format'].values[0]} | {x[:50]}...",
+                    format_func=lambda x: f"{filtered_df[filtered_df['nom']==x]['format'].values[0]} | {x}",
                     label_visibility="collapsed"
                 )
                 
