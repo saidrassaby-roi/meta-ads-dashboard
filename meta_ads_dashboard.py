@@ -1,11 +1,18 @@
 """
-Meta Ads Creative Intelligence Dashboard V2.3
+Meta Ads Creative Intelligence Dashboard V2.5
 =============================================
 Application de pilotage des créatives publicitaires Meta Ads.
 Tableau avec composants natifs Streamlit pour un affichage fiable.
 
-Auteur: BNB Solutions Digitales
-Version: 2.3
+Auteur: Saïd Rassaby
+Version: 2.5
+
+Changelog V2.5:
+- Score Profitabilité V2 avec Panier moyen (20%)
+- Paramètre Marge moyenne configurable
+- Calcul du Profit estimé
+- Alerte ROAS trompeur (ROAS > 1 mais perte)
+- Affichage du ROAS seuil de rentabilité
 """
 
 import streamlit as st
@@ -494,8 +501,15 @@ def get_grade(score):
     else: return 'F'
 
 
-def calculate_scores(df, trends=None):
-    """Calcule les scores pour chaque créative."""
+def calculate_scores(df, trends=None, marge_moyenne=40):
+    """Calcule les scores pour chaque créative.
+    
+    Score Profitabilité V2:
+    - ROAS: 40%
+    - CPA inversé: 25%
+    - CVR: 15%
+    - Panier moyen: 20%
+    """
     
     df = df[df['impressions'] >= 500].copy()
     
@@ -517,6 +531,16 @@ def calculate_scores(df, trends=None):
     # Calculer le CPMu (Cost Per Mille Unique)
     df['cpmu'] = np.where(df['reach'] > 0, (df['depense'] / df['reach']) * 1000, 0)
     
+    # Calculer le panier moyen (AOV)
+    df['panier_moyen'] = np.where(df['achats'] > 0, df['valeur_achats'] / df['achats'], 0)
+    
+    # Calculer le profit estimé
+    marge_ratio = marge_moyenne / 100
+    df['profit_estime'] = (df['valeur_achats'] * marge_ratio) - df['depense']
+    df['profit_ratio'] = np.where(df['depense'] > 0, (df['profit_estime'] / df['depense']) * 100, 0)
+    df['is_profitable'] = df['profit_estime'] > 0
+    df['roas_seuil'] = round(1 / marge_ratio, 2)
+    
     roas_mean, roas_std = calc_stats(df['roas'])
     ctr_mean, ctr_std = calc_stats(df['ctr_lien'])
     cpc_mean, cpc_std = calc_stats(df['cpc_lien'])
@@ -524,6 +548,7 @@ def calculate_scores(df, trends=None):
     cpmu_mean, cpmu_std = calc_stats(df['cpmu'])
     reach_mean, reach_std = calc_stats(df['reach'])
     clics_mean, clics_std = calc_stats(df['clics_lien'])
+    panier_mean, panier_std = calc_stats(df['panier_moyen'])
     
     df['cvr'] = np.where(df['clics_lien'] > 0, (df['achats'] / df['clics_lien']) * 100, 0)
     cvr_mean, cvr_std = calc_stats(df['cvr'])
@@ -538,6 +563,7 @@ def calculate_scores(df, trends=None):
         z_roas = z_score(row['roas'], roas_mean, roas_std)
         z_cpa = z_score(row['cpa_calc'] if row['cpa_calc'] > 0 else cpa_mean * 2, cpa_mean, cpa_std, inverse=True)
         z_cvr = z_score(row['cvr'], cvr_mean, cvr_std)
+        z_panier = z_score(row['panier_moyen'], panier_mean, panier_std)
         z_ctr = z_score(row['ctr_lien'], ctr_mean, ctr_std)
         z_cpc = z_score(row['cpc_lien'], cpc_mean, cpc_std, inverse=True)
         z_cpm = z_score(row['cpm'], cpm_mean, cpm_std, inverse=True)
@@ -548,7 +574,8 @@ def calculate_scores(df, trends=None):
         def z_to_100(z):
             return max(0, min(100, 50 + z * 10))
         
-        score_profit = round(z_to_100(0.45 * z_roas + 0.35 * z_cpa + 0.20 * z_cvr))
+        # Score Profitabilité V2: ROAS 40% + CPA 25% + CVR 15% + Panier 20%
+        score_profit = round(z_to_100(0.40 * z_roas + 0.25 * z_cpa + 0.15 * z_cvr + 0.20 * z_panier))
         score_trafic = round(z_to_100(0.50 * z_ctr + 0.30 * z_cpc + 0.20 * z_clics))
         # Nouveau calcul: CPMu inversé (50%) + Couverture (50%)
         score_notoriete = round(z_to_100(0.50 * z_cpmu + 0.50 * z_reach))
@@ -658,6 +685,20 @@ def detect_alerts(df, trends=None):
     
     for _, row in df.iterrows():
         nom = row['nom']
+        
+        # NOUVELLE ALERTE: ROAS trompeur (ROAS > 1 mais perte réelle)
+        roas = row.get('roas', 0)
+        profit_estime = row.get('profit_estime', 0)
+        if roas > 1 and profit_estime < 0:
+            alerts.append({
+                'type': 'danger',
+                'icon': '💸',
+                'title': 'ROAS trompeur',
+                'creative': nom,
+                'message': f"ROAS {roas:.2f} mais perte de {abs(profit_estime):.0f}€",
+                'action': 'Vérifier la marge ou pauser cette créative',
+                'priority': 1
+            })
         
         # Alerte Frequency > 3
         if row.get('frequency', 0) > 3:
@@ -1040,6 +1081,21 @@ def main():
         min_impressions = st.slider("Impressions minimum", 0, 10000, 500, 100)
         
         st.divider()
+        st.subheader("💵 Rentabilité")
+        marge_moyenne = st.slider(
+            "Marge moyenne (%)",
+            min_value=10,
+            max_value=80,
+            value=40,
+            step=5,
+            help="Votre marge brute moyenne sur les produits vendus. Utilisé pour calculer le profit estimé et le ROAS seuil."
+        )
+        
+        # Calculer et afficher le ROAS seuil
+        roas_seuil = round(1 / (marge_moyenne / 100), 2)
+        st.info(f"📊 **ROAS seuil**: {roas_seuil}  \nMinimum pour être rentable avec {marge_moyenne}% de marge")
+        
+        st.divider()
         st.markdown("""
         **Légende:** 🚀 Scaler · ⚡ Tester · 👁️ Surveiller · ⏸️ Pauser
         """)
@@ -1072,7 +1128,7 @@ def main():
             except Exception as e:
                 st.sidebar.warning(f"⚠️ Erreur: {str(e)}")
         
-        df = calculate_scores(df, trends)
+        df = calculate_scores(df, trends, marge_moyenne)
         
         if len(df) == 0:
             st.warning("⚠️ Aucune créative avec assez d'impressions.")
@@ -1103,6 +1159,12 @@ def main():
         total_achats = df['achats'].sum()
         avg_ctr = df['ctr_lien'].mean()
         avg_cpm = df['cpm'].mean()
+        
+        # Nouveaux KPIs V2.5
+        avg_panier = total_revenue / total_achats if total_achats > 0 else 0
+        total_profit = df['profit_estime'].sum()
+        nb_profitable = df['is_profitable'].sum()
+        nb_non_profitable = len(df) - nb_profitable
         
         action_counts = df['action'].value_counts()
         scale_count = action_counts.get('scale', 0)
@@ -1153,18 +1215,20 @@ def main():
             st.metric("💰 Dépense", f"{total_spend:,.0f}€", delta=spend_delta)
         
         with kpi2:
-            roas_status = "↗ Rentable" if avg_roas >= 2 else "↘ À améliorer" if avg_roas < 1 else None
-            st.metric("📈 ROAS", f"{avg_roas:.2f}", delta=roas_status, delta_color="normal" if avg_roas >= 2 else "inverse")
+            roas_seuil_val = df['roas_seuil'].iloc[0] if len(df) > 0 else 2.5
+            roas_status = f"↗ > seuil ({roas_seuil_val})" if avg_roas >= roas_seuil_val else f"↘ < seuil ({roas_seuil_val})"
+            st.metric("📈 ROAS", f"{avg_roas:.2f}", delta=roas_status, delta_color="normal" if avg_roas >= roas_seuil_val else "inverse")
         
         with kpi3:
             st.metric("🛒 Achats", f"{total_achats:,.0f}")
         
         with kpi4:
-            ctr_status = "Bon" if avg_ctr >= 1.5 else None
-            st.metric("👆 CTR", f"{avg_ctr:.2f}%", delta=ctr_status)
+            st.metric("🛍️ Panier moyen", f"{avg_panier:.0f}€")
         
         with kpi5:
-            st.metric("💵 CPM", f"{avg_cpm:.2f}€")
+            profit_status = "✅ Rentable" if total_profit > 0 else "❌ Perte"
+            profit_color = "normal" if total_profit > 0 else "inverse"
+            st.metric("💵 Profit estimé", f"{total_profit:+,.0f}€", delta=profit_status, delta_color=profit_color)
         
         with kpi6:
             st.metric("🎯 Santé", f"{health_score}/100", delta=health_status, delta_color="normal" if health_score >= 50 else "inverse")
@@ -1180,6 +1244,11 @@ def main():
         summary_parts.append(f"Diversification: **{diversification['score']}/100**")
         
         st.info(f"🎯 {' · '.join(summary_parts)}")
+        
+        # Info rentabilité
+        if nb_non_profitable > 0:
+            roas_seuil_val = df['roas_seuil'].iloc[0] if len(df) > 0 else 2.5
+            st.warning(f"💸 **{nb_non_profitable}** créative{'s' if nb_non_profitable > 1 else ''} non rentable{'s' if nb_non_profitable > 1 else ''} (ROAS < {roas_seuil_val}) · {nb_profitable} rentable{'s' if nb_profitable > 1 else ''}")
         
         # ===== LIGNE 3: CARDS ACTIONS + GRAPHIQUE =====
         col_cards, col_chart = st.columns([3, 1])
@@ -1697,7 +1766,7 @@ def main():
                 display_df['Tend.'] = "-"
             
             # Scores formatés avec grades colorés
-            display_df['Profit'] = display_df.apply(
+            display_df['Score💰'] = display_df.apply(
                 lambda r: format_grade(r['score_profitabilite'], r.get('var_profit', 0)), axis=1
             )
             display_df['Trafic'] = display_df.apply(
@@ -1726,19 +1795,28 @@ def main():
                 lambda x: f"{'🟢' if x >= 0.7 else '🟡' if x >= 0.5 else '🔴'} {x*100:.0f}%"
             )
             
+            # Nouvelles colonnes V2.5 : Panier moyen et Profit estimé
+            panier_mean = filtered_df['panier_moyen'].mean() if 'panier_moyen' in filtered_df.columns and len(filtered_df) > 0 else 0
+            display_df['Panier'] = display_df['panier_moyen'].apply(
+                lambda x: f"{'🟢' if x > panier_mean * 1.2 else '🟡' if x > panier_mean * 0.8 else '🔴'} {x:.0f}€" if x > 0 else "-"
+            )
+            display_df['Profit€'] = display_df.apply(
+                lambda r: f"{'✅' if r['is_profitable'] else '❌'} {r['profit_estime']:+,.0f}€", axis=1
+            )
+            
             # Action formatée
             action_icons = {'scale': '🚀', 'test': '⚡', 'monitor': '👁️', 'pause': '⏸️'}
             display_df['Act.'] = display_df['action'].map(action_icons)
             
             # Définir les colonnes selon le mode de vue
             if view_mode == 'complete':
-                columns_to_show = ['format', 'Nom', 'Tend.', 'Profit', 'Trafic', 'Notoriété', 'Global', 'ROAS', 'CTR', 'CPMu', 'Dépense', 'Freq.', 'scale_potential', 'Act.']
+                columns_to_show = ['format', 'Nom', 'Tend.', 'Score💰', 'Panier', 'Profit€', 'ROAS', 'CTR', 'CPMu', 'Dépense', 'Freq.', 'scale_potential', 'Act.']
             elif view_mode == 'scores':
-                columns_to_show = ['format', 'Nom', 'Tend.', 'Profit', 'Trafic', 'Notoriété', 'Global', 'Conf.', 'scale_potential', 'Act.']
+                columns_to_show = ['format', 'Nom', 'Tend.', 'Score💰', 'Trafic', 'Notoriété', 'Global', 'Conf.', 'scale_potential', 'Act.']
             elif view_mode == 'metrics':
-                columns_to_show = ['format', 'Nom', 'Tend.', 'ROAS', 'CTR', 'CPMu', 'Dépense', 'Freq.', 'scale_potential', 'Act.']
+                columns_to_show = ['format', 'Nom', 'Tend.', 'ROAS', 'Panier', 'Profit€', 'CTR', 'CPMu', 'Dépense', 'Freq.', 'scale_potential', 'Act.']
             else:  # minimal
-                columns_to_show = ['format', 'Nom', 'Global', 'ROAS', 'scale_potential', 'Act.']
+                columns_to_show = ['format', 'Nom', 'Global', 'ROAS', 'Profit€', 'scale_potential', 'Act.']
             
             final_df = display_df[columns_to_show].copy()
             
@@ -1749,16 +1827,18 @@ def main():
             # Configuration dynamique des colonnes
             column_config = {
                 "Fmt": st.column_config.TextColumn("Fmt", width=55),
-                "Nom": st.column_config.TextColumn("Nom", width=280),
+                "Nom": st.column_config.TextColumn("Nom", width=250),
                 "Tend.": st.column_config.TextColumn("Tend.", width=75),
-                "Profit": st.column_config.TextColumn("Profit", width=95),
-                "Trafic": st.column_config.TextColumn("Trafic", width=95),
-                "Notoriété": st.column_config.TextColumn("Notoriété", width=95),
-                "Global": st.column_config.TextColumn("Global", width=95),
-                "ROAS": st.column_config.TextColumn("ROAS", width=60),
-                "CTR": st.column_config.TextColumn("CTR", width=65),
+                "Score💰": st.column_config.TextColumn("Score💰", width=90),
+                "Trafic": st.column_config.TextColumn("Trafic", width=90),
+                "Notoriété": st.column_config.TextColumn("Notoriété", width=90),
+                "Global": st.column_config.TextColumn("Global", width=90),
+                "ROAS": st.column_config.TextColumn("ROAS", width=55),
+                "Panier": st.column_config.TextColumn("Panier", width=75),
+                "Profit€": st.column_config.TextColumn("Profit€", width=90),
+                "CTR": st.column_config.TextColumn("CTR", width=60),
                 "CPMu": st.column_config.TextColumn("CPMu", width=80),
-                "Dépense": st.column_config.TextColumn("Dép.", width=65),
+                "Dépense": st.column_config.TextColumn("Dép.", width=60),
                 "Freq.": st.column_config.TextColumn("Freq.", width=70),
                 "Conf.": st.column_config.TextColumn("Conf.", width=70),
                 "Pot.": st.column_config.ProgressColumn("Pot.", format="%d", min_value=0, max_value=100, width=70),
@@ -1818,16 +1898,19 @@ def main():
                 tab_profit, tab_trafic, tab_notoriete, tab_tendance = st.tabs(["💰 Profit", "🚀 Trafic", "👁️ Notoriété", "📈 Tendance"])
                 
                 with tab_profit:
-                    st.caption("**Score Profit** = ROAS (45%) + CPA inversé (35%) + CVR (20%)")
+                    st.caption("**Score Profit V2** = ROAS (40%) + CPA inversé (25%) + CVR (15%) + Panier moyen (20%)")
                     cpa_q25, cpa_q50, cpa_q75 = filtered_df[filtered_df['cpa_calc'] > 0]['cpa_calc'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cpa_calc'] > 0]) > 0 else (10, 20, 40)
                     cvr_q25, cvr_q50, cvr_q75 = filtered_df[filtered_df['cvr'] > 0]['cvr'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cvr'] > 0]) > 0 else (1, 2, 5)
+                    panier_q25, panier_q50, panier_q75 = filtered_df[filtered_df['panier_moyen'] > 0]['panier_moyen'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['panier_moyen'] > 0]) > 0 else (20, 40, 80)
                     
-                    profit_df = filtered_df[['nom', 'format', 'roas', 'cpa_calc', 'cvr', 'achats', 'depense', 'score_profitabilite']].copy()
+                    profit_df = filtered_df[['nom', 'format', 'roas', 'cpa_calc', 'cvr', 'panier_moyen', 'profit_estime', 'is_profitable', 'achats', 'score_profitabilite']].copy()
                     profit_df['ROAS'] = profit_df['roas'].apply(lambda x: format_metric_color(x, (roas_q25, roas_q50, roas_q75), inverse=False, decimals=2))
                     profit_df['CPA'] = profit_df['cpa_calc'].apply(lambda x: format_metric_color(x, (cpa_q25, cpa_q50, cpa_q75), inverse=True, suffix="€", decimals=2))
                     profit_df['CVR'] = profit_df['cvr'].apply(lambda x: format_metric_color(x, (cvr_q25, cvr_q50, cvr_q75), inverse=False, suffix="%", decimals=2))
+                    profit_df['Panier'] = profit_df['panier_moyen'].apply(lambda x: format_metric_color(x, (panier_q25, panier_q50, panier_q75), inverse=False, suffix="€", decimals=0))
+                    profit_df['Profit €'] = profit_df.apply(lambda r: f"{'✅' if r['is_profitable'] else '❌'} {r['profit_estime']:+,.0f}€", axis=1)
                     profit_df['Score'] = profit_df['score_profitabilite'].apply(format_score_color)
-                    st.dataframe(profit_df[['format', 'nom', 'ROAS', 'CPA', 'CVR', 'achats', 'Score']], use_container_width=True, height=min(300, 40 + len(profit_df) * 35), hide_index=True)
+                    st.dataframe(profit_df[['format', 'nom', 'ROAS', 'CPA', 'CVR', 'Panier', 'Profit €', 'achats', 'Score']], use_container_width=True, height=min(300, 40 + len(profit_df) * 35), hide_index=True)
                 
                 with tab_trafic:
                     st.caption("**Score Trafic** = CTR (50%) + CPC inversé (30%) + Clics (20%)")
