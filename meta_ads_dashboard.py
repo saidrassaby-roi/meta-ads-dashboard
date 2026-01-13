@@ -1087,7 +1087,7 @@ def main():
             min_value=10,
             max_value=80,
             value=40,
-            step=5,
+            step=1,
             help="Votre marge brute moyenne sur les produits vendus. Utilisé pour calculer le profit estimé et le ROAS seuil."
         )
         
