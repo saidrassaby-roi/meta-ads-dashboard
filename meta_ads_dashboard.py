@@ -201,6 +201,8 @@ def standardize_columns(df):
     
     column_mappings = {
         'nom': ['Nom de la publicité', 'Ad name', 'nom_publicite', 'nom', 'Nom de la pub'],
+        'campagne': ['Nom de la campagne', 'Campaign name', 'campagne', 'nom_campagne'],
+        'audience': ['Nom de l\'ensemble de publicités', 'Ad set name', 'audience', 'nom_adset', 'adset'],
         'impressions': ['Impressions', 'impressions'],
         'reach': ['Couverture', 'Reach', 'reach', 'couverture'],
         'clics_lien': ['Clics sur un lien', 'Link clicks', 'clics_lien', 'Clics sur le lien'],
@@ -234,6 +236,13 @@ def standardize_columns(df):
             rename_dict[found_col] = standard_name
     
     df = df.rename(columns=rename_dict)
+    
+    # Ajouter colonnes par défaut si absentes
+    if 'campagne' not in df.columns:
+        df['campagne'] = 'Non spécifié'
+    if 'audience' not in df.columns:
+        df['audience'] = 'Non spécifié'
+    
     return df
 
 
@@ -1752,6 +1761,29 @@ def main():
                 date_stats = date_stats.sort_index(ascending=False)
                 st.dataframe(date_stats, use_container_width=True)
             
+            # LIGNE 3b: Campagne et Audience
+            col_camp, col_aud = st.columns(2)
+            
+            with col_camp:
+                with st.expander("📢 Par Campagne", expanded=False):
+                    campagne_stats = df_analyse.groupby('campagne').agg({
+                        'nom': 'count', 'depense': 'sum', 'achats': 'sum',
+                        'roas': 'mean', 'scale_potential': 'mean'
+                    }).round(2)
+                    campagne_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'Potentiel']
+                    campagne_stats = campagne_stats.sort_values('Dépense €', ascending=False)
+                    st.dataframe(campagne_stats, use_container_width=True)
+            
+            with col_aud:
+                with st.expander("🎯 Par Audience (AdSet)", expanded=False):
+                    audience_stats = df_analyse.groupby('audience').agg({
+                        'nom': 'count', 'depense': 'sum', 'achats': 'sum',
+                        'roas': 'mean', 'scale_potential': 'mean'
+                    }).round(2)
+                    audience_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'Potentiel']
+                    audience_stats = audience_stats.sort_values('Dépense €', ascending=False)
+                    st.dataframe(audience_stats, use_container_width=True)
+            
             st.divider()
             
             # LIGNE 4: Insights et recommandations
@@ -1856,6 +1888,15 @@ def main():
                 st.session_state.reset_filters = True
                 st.rerun()
         
+        # ===== LIGNE 1b: FILTRES CAMPAGNE / AUDIENCE =====
+        col_camp_filter, col_aud_filter = st.columns(2)
+        with col_camp_filter:
+            campagne_options = list(df['campagne'].unique())
+            campagne_filter = st.multiselect("📢 Campagne", options=campagne_options, default=campagne_options, label_visibility="visible")
+        with col_aud_filter:
+            audience_options = list(df['audience'].unique())
+            audience_filter = st.multiselect("🎯 Audience", options=audience_options, default=audience_options, label_visibility="visible")
+        
         # Construire le filtre d'action
         action_filter = []
         if show_scale: action_filter.append('scale')
@@ -1911,6 +1952,8 @@ def main():
         filtered_df = df[
             (df['format'].isin(format_filter)) &
             (df['persona'].isin(persona_filter)) &
+            (df['campagne'].isin(campagne_filter)) &
+            (df['audience'].isin(audience_filter)) &
             (df['nomenclature_valide'].isin(conformite_valeurs)) &
             (df['action'].isin(action_filter)) &
             (df['roas'] >= min_roas) &
