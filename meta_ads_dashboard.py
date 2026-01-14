@@ -982,7 +982,7 @@ def calculate_diversification_score(df):
     total_budget = df['depense'].sum()
     
     if total_budget == 0:
-        return {'score': 100, 'alerts': [], 'by_usp': {}, 'by_hook': {}, 'by_format': {}}
+        return {'score': 100, 'alerts': [], 'by_usp': {}, 'by_concept': {}, 'by_format': {}}
     
     # Analyse par USP
     usp_budget = df.groupby('usp')['depense'].sum()
@@ -1008,18 +1008,18 @@ def calculate_diversification_score(df):
                 'priority': 2
             })
     
-    # Analyse par Hook
-    hook_budget = df.groupby('hook')['depense'].sum()
-    hook_pct = (hook_budget / total_budget * 100).to_dict()
+    # Analyse par Concept (remplace Hook)
+    concept_budget = df.groupby('concept')['depense'].sum()
+    concept_pct = (concept_budget / total_budget * 100).to_dict()
     
-    for hook, pct in hook_pct.items():
+    for concept, pct in concept_pct.items():
         if pct > 50:
             alerts.append({
                 'type': 'danger',
-                'icon': '🎣',
-                'title': f'Concentration Hook: {hook}',
-                'message': f'{pct:.0f}% du budget sur ce hook',
-                'action': 'Tester d\'autres types d\'accroches',
+                'icon': '💡',
+                'title': f'Concentration Concept: {concept}',
+                'message': f'{pct:.0f}% du budget sur ce concept',
+                'action': 'Tester d\'autres concepts créatifs',
                 'priority': 1
             })
     
@@ -1041,18 +1041,18 @@ def calculate_diversification_score(df):
     # Calculer score de diversification (100 = parfaitement diversifié)
     # Plus il y a de concentration, plus le score est bas
     max_usp_pct = max(usp_pct.values()) if usp_pct else 0
-    max_hook_pct = max(hook_pct.values()) if hook_pct else 0
+    max_concept_pct = max(concept_pct.values()) if concept_pct else 0
     max_format_pct = max(format_pct.values()) if format_pct else 0
     
     # Score: 100 si tout est à 25%, 0 si tout est à 100%
-    score = 100 - (max_usp_pct * 0.4 + max_hook_pct * 0.35 + max_format_pct * 0.25) * 0.7
+    score = 100 - (max_usp_pct * 0.4 + max_concept_pct * 0.35 + max_format_pct * 0.25) * 0.7
     score = max(0, min(100, score))
     
     return {
         'score': round(score),
         'alerts': alerts,
         'by_usp': usp_pct,
-        'by_hook': hook_pct,
+        'by_concept': concept_pct,
         'by_format': format_pct
     }
 
