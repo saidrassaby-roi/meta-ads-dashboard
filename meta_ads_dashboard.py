@@ -4,8 +4,8 @@ Meta Ads Creative Intelligence Dashboard V2.5
 Application de pilotage des créatives publicitaires Meta Ads.
 Tableau avec composants natifs Streamlit pour un affichage fiable.
 
-Auteur: Saïd Rassaby
-Version: 2.5
+Auteur: Le ROI Digital
+Version: 2.5 - Nomenclature personnalisée
 
 Changelog V2.5:
 - Score Profitabilité V2 avec Panier moyen (20%)
@@ -13,6 +13,14 @@ Changelog V2.5:
 - Calcul du Profit estimé
 - Alerte ROAS trompeur (ROAS > 1 mais perte)
 - Affichage du ROAS seuil de rentabilité
+
+Nomenclature créatives:
+- Structure: [FORMAT]_CCPT-[Concept]_USP-[Argument]_PERSONA-[Cible]_[Version]_[Date]
+- Exemple:   VID_CCPT-Transformation_USP-Garantie-30-Jours_PERSONA-Prospect_V1_2026-01-15
+- Formats:   IMG, VID, CAR, GIF, UGC, STO
+- CCPT:      Concept créatif (angle de communication)
+- USP:       Unique Selling Proposition (argument de vente)
+- Date:      Format YYYY-MM-DD ou YYYYMMDD
 """
 
 import streamlit as st
@@ -397,43 +405,109 @@ def calculate_trends_from_daily(df_daily, lookback_days=30):
     return trends, sparklines
 
 
+# =============================================================================
+# NOMENCLATURE CRÉATIVES — Configuration
+# =============================================================================
+# Structure: [FORMAT]_CCPT-[Concept]_USP-[Argument]_PERSONA-[Cible]_[Version]_[Date]
+# Exemple:   VID_CCPT-Transformation_USP-Garantie-30-Jours_PERSONA-Prospect_V1_2026-01-15
+# =============================================================================
+
+FORMATS_VALIDES = ['IMG', 'VID', 'CAR', 'GIF', 'UGC', 'STO']  # STO = Story
+
+
 def parse_creative_name(nom):
-    """Extrait les composants du nom de la créative."""
+    """
+    Extrait les composants du nom de la créative selon la nomenclature standardisée.
     
-    if not isinstance(nom, str):
-        return {'usp': 'Autre', 'hook': 'Autre', 'format': 'IMG'}
+    Structure attendue:
+        [FORMAT]_CCPT-[Concept]_USP-[Argument]_PERSONA-[Cible]_[Version]_[Date]
     
-    usp = 'Autre'
-    hook = 'Autre'
-    format_type = 'IMG'
+    Exemples:
+        VID_CCPT-Transformation_USP-Garantie-30-Jours_PERSONA-Prospect_V1_2026-01-15
+        IMG_CCPT-Temoignage_USP-Livraison-Gratuite_PERSONA-Client-Fidele_V2_2026-01-20
+        CAR_CCPT-Promo-Flash_USP-Moins-50-Pourcent_PERSONA-All_V1_2026-02-01
     
-    nom_upper = nom.upper()
-    if nom_upper.startswith('IMG'):
-        format_type = 'IMG'
-    elif nom_upper.startswith('VID'):
-        format_type = 'VID'
-    elif nom_upper.startswith('GIF'):
-        format_type = 'GIF'
-    elif nom_upper.startswith('CAR'):
-        format_type = 'CAR'
+    Returns:
+        dict avec 'format', 'concept', 'usp', 'persona', 'version', 'date', 'valide', 'erreurs'
+    """
     
-    usp_match = re.search(r'USP\s*:\s*([^-]+)', nom, re.IGNORECASE)
+    result = {
+        'format': 'Autre',
+        'concept': 'Autre',
+        'usp': 'Autre',
+        'persona': 'Autre',
+        'version': 'Autre',
+        'date': 'Autre',
+        'valide': False,
+        'erreurs': []
+    }
+    
+    if not isinstance(nom, str) or not nom.strip():
+        result['erreurs'].append('Nom vide ou invalide')
+        return result
+    
+    nom = nom.strip()
+    erreurs = []
+    
+    # EXTRACTION DU FORMAT
+    format_found = False
+    for fmt in FORMATS_VALIDES:
+        if nom.upper().startswith(fmt):
+            result['format'] = fmt
+            format_found = True
+            break
+    if not format_found:
+        erreurs.append('FORMAT manquant')
+    
+    # EXTRACTION DU CONCEPT (sigle CCPT)
+    concept_match = re.search(r'CCPT-([A-Za-z0-9-]+?)(?:_|$)', nom, re.IGNORECASE)
+    if concept_match:
+        concept_raw = concept_match.group(1)
+        result['concept'] = concept_raw.replace('-', ' ').title()
+    else:
+        erreurs.append('CCPT manquant')
+    
+    # EXTRACTION DE L'USP (Unique Selling Proposition)
+    usp_match = re.search(r'USP-([A-Za-z0-9-]+?)(?:_|$)', nom, re.IGNORECASE)
     if usp_match:
-        usp = usp_match.group(1).strip()
-    elif 'Nouvelle collection' in nom:
-        usp = 'Nouvelle collection'
+        usp_raw = usp_match.group(1)
+        result['usp'] = usp_raw.replace('-', ' ').title()
+    else:
+        erreurs.append('USP manquant')
     
-    nom_lower = nom.lower()
-    if 'probleme/solution' in nom_lower or 'problème/solution' in nom_lower:
-        hook = 'Problème/Solution'
-    elif 'probleme/frustation' in nom_lower or 'problème/frustration' in nom_lower:
-        hook = 'Problème/Frustration'
-    elif ' pv ' in nom_lower or nom_lower.startswith('pv ') or '--pv--' in nom_lower:
-        hook = 'Proposition de Valeur'
-    elif 'produit neutre' in nom_lower:
-        hook = 'Produit neutre'
+    # EXTRACTION DU PERSONA
+    persona_match = re.search(r'PERSONA-([A-Za-z0-9-]+?)(?:_|$)', nom, re.IGNORECASE)
+    if persona_match:
+        persona_raw = persona_match.group(1)
+        result['persona'] = persona_raw.replace('-', ' ').title()
+    else:
+        erreurs.append('PERSONA manquant')
     
-    return {'usp': usp, 'hook': hook, 'format': format_type}
+    # EXTRACTION DE LA VERSION
+    version_match = re.search(r'_(V\d+)(?:_|$)', nom, re.IGNORECASE)
+    if version_match:
+        result['version'] = version_match.group(1).upper()
+    else:
+        erreurs.append('VERSION manquante')
+    
+    # EXTRACTION DE LA DATE (format YYYY-MM-DD ou YYYYMMDD)
+    date_match = re.search(r'_(\d{4}-\d{2}-\d{2})$', nom)
+    if date_match:
+        result['date'] = date_match.group(1)
+    else:
+        # Format alternatif YYYYMMDD
+        date_match_alt = re.search(r'_(\d{8})$', nom)
+        if date_match_alt:
+            d = date_match_alt.group(1)
+            result['date'] = f"{d[:4]}-{d[4:6]}-{d[6:8]}"
+        else:
+            erreurs.append('DATE manquante')
+    
+    # Déterminer la validité globale
+    result['erreurs'] = erreurs
+    result['valide'] = len(erreurs) == 0
+    
+    return result
 
 
 def calculate_confidence(row):
@@ -622,10 +696,16 @@ def calculate_scores(df, trends=None, marge_moyenne=40):
     for col in scores_df.columns:
         df[col] = scores_df[col].values
     
+    # Extraction des composants de la nomenclature
     parsed = df['nom'].apply(parse_creative_name)
-    df['usp'] = parsed.apply(lambda x: x['usp'])
-    df['hook'] = parsed.apply(lambda x: x['hook'])
     df['format'] = parsed.apply(lambda x: x['format'])
+    df['concept'] = parsed.apply(lambda x: x['concept'])
+    df['usp'] = parsed.apply(lambda x: x['usp'])
+    df['persona'] = parsed.apply(lambda x: x['persona'])
+    df['version'] = parsed.apply(lambda x: x['version'])
+    df['date_creative'] = parsed.apply(lambda x: x['date'])
+    df['nomenclature_valide'] = parsed.apply(lambda x: x['valide'])
+    df['nomenclature_erreurs'] = parsed.apply(lambda x: ', '.join(x['erreurs']) if x['erreurs'] else '')
     
     df['action'] = df.apply(lambda r: determine_action(r, trends), axis=1)
     df['recommendation'] = df.apply(lambda r: generate_recommendation(r, trends), axis=1)
@@ -1567,39 +1647,173 @@ def main():
     with tab3:
         st.header("Analyse par angle créatif")
         
-        col1, col2 = st.columns(2)
+        # INDICATEUR DE CONFORMITÉ NOMENCLATURE
+        total_creatives = len(df)
+        conformes = df['nomenclature_valide'].sum()
+        non_conformes = total_creatives - conformes
+        taux_conformite = (conformes / total_creatives * 100) if total_creatives > 0 else 0
         
-        with col1:
-            st.subheader("📌 Par USP")
-            usp_stats = df.groupby('usp').agg({
-                'nom': 'count', 'depense': 'sum', 'achats': 'sum',
-                'roas': 'mean', 'ctr_lien': 'mean', 'scale_potential': 'mean'
-            }).round(2)
-            usp_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'CTR %', 'Potentiel']
-            usp_stats = usp_stats.sort_values('Potentiel', ascending=False)
+        if taux_conformite == 100:
+            conformite_color = "#10B981"  # Vert
+            conformite_icon = "✅"
+        elif taux_conformite >= 80:
+            conformite_color = "#F59E0B"  # Orange
+            conformite_icon = "⚠️"
+        else:
+            conformite_color = "#EF4444"  # Rouge
+            conformite_icon = "❌"
+        
+        col_conf1, col_conf2, col_conf3 = st.columns([2, 2, 3])
+        with col_conf1:
+            st.metric(
+                label=f"{conformite_icon} Conformité nomenclature",
+                value=f"{taux_conformite:.0f}%",
+                delta=f"{conformes}/{total_creatives} créatives"
+            )
+        with col_conf2:
+            if non_conformes > 0:
+                st.warning(f"**{non_conformes}** créative(s) non conforme(s)")
+            else:
+                st.success("Toutes les créatives sont conformes !")
+        with col_conf3:
+            # Toggle pour filtrer uniquement les conformes
+            filter_conformes_only = st.checkbox(
+                "Analyser uniquement les créatives conformes", 
+                value=False,
+                help="Exclut les créatives avec 'Autre' des analyses"
+            )
+        
+        # Appliquer le filtre si activé
+        df_analyse = df[df['nomenclature_valide'] == True] if filter_conformes_only else df
+        
+        if filter_conformes_only and len(df_analyse) == 0:
+            st.error("Aucune créative conforme à analyser. Désactivez le filtre ou corrigez vos noms de créatives.")
+        else:
+            st.divider()
+            
+            # LIGNE 1: Concept et USP
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("💡 Par Concept (CCPT)")
+                concept_stats = df_analyse.groupby('concept').agg({
+                    'nom': 'count', 'depense': 'sum', 'achats': 'sum',
+                    'roas': 'mean', 'ctr_lien': 'mean', 'scale_potential': 'mean'
+                }).round(2)
+                concept_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'CTR %', 'Potentiel']
+                concept_stats = concept_stats.sort_values('Potentiel', ascending=False)
+                st.dataframe(concept_stats, use_container_width=True)
+            
+            with col2:
+                st.subheader("📌 Par USP")
+                usp_stats = df_analyse.groupby('usp').agg({
+                    'nom': 'count', 'depense': 'sum', 'achats': 'sum',
+                    'roas': 'mean', 'ctr_lien': 'mean', 'scale_potential': 'mean'
+                }).round(2)
+                usp_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'CTR %', 'Potentiel']
+                usp_stats = usp_stats.sort_values('Potentiel', ascending=False)
             st.dataframe(usp_stats, use_container_width=True)
-        
-        with col2:
-            st.subheader("🎣 Par Hook")
-            hook_stats = df.groupby('hook').agg({
-                'nom': 'count', 'depense': 'sum', 'achats': 'sum',
-                'roas': 'mean', 'ctr_lien': 'mean', 'scale_potential': 'mean'
-            }).round(2)
-            hook_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'CTR %', 'Potentiel']
-            hook_stats = hook_stats.sort_values('Potentiel', ascending=False)
-            st.dataframe(hook_stats, use_container_width=True)
-        
-        st.divider()
-        best_usp = usp_stats.index[0] if len(usp_stats) > 0 else "N/A"
-        best_hook = hook_stats.index[0] if len(hook_stats) > 0 else "N/A"
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.info(f"**USP gagnante:** {best_usp}")
-        with col2:
-            st.info(f"**Hook efficace:** {best_hook}")
-        with col3:
-            st.success(f"**Combo:** {best_usp} + {best_hook}")
+            
+            st.divider()
+            
+            # LIGNE 2: Persona et Format
+            col3, col4 = st.columns(2)
+            
+            with col3:
+                st.subheader("👤 Par Persona")
+                persona_stats = df_analyse.groupby('persona').agg({
+                    'nom': 'count', 'depense': 'sum', 'achats': 'sum',
+                    'roas': 'mean', 'ctr_lien': 'mean', 'scale_potential': 'mean',
+                    'profit_estime': 'sum'
+                }).round(2)
+                persona_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'CTR %', 'Potentiel', 'Profit €']
+                persona_stats = persona_stats.sort_values('Potentiel', ascending=False)
+                st.dataframe(persona_stats, use_container_width=True)
+            
+            with col4:
+                st.subheader("🎬 Par Format")
+                format_stats = df_analyse.groupby('format').agg({
+                    'nom': 'count', 'depense': 'sum', 'achats': 'sum',
+                    'roas': 'mean', 'ctr_lien': 'mean', 'scale_potential': 'mean'
+                }).round(2)
+                format_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'CTR %', 'Potentiel']
+                format_stats = format_stats.sort_values('Potentiel', ascending=False)
+                st.dataframe(format_stats, use_container_width=True)
+            
+            st.divider()
+            
+            # LIGNE 3: Date de création
+            with st.expander("📅 Par Date de création", expanded=False):
+                date_stats = df_analyse.groupby('date_creative').agg({
+                    'nom': 'count', 'depense': 'sum', 'achats': 'sum',
+                    'roas': 'mean', 'scale_potential': 'mean'
+                }).round(2)
+                date_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'Potentiel']
+                date_stats = date_stats.sort_values(date_stats.index, ascending=False)
+                st.dataframe(date_stats, use_container_width=True)
+            
+            st.divider()
+            
+            # LIGNE 4: Insights et recommandations
+            best_concept = concept_stats.index[0] if len(concept_stats) > 0 else "N/A"
+            best_usp = usp_stats.index[0] if len(usp_stats) > 0 else "N/A"
+            best_persona = persona_stats.index[0] if len(persona_stats) > 0 else "N/A"
+            best_format = format_stats.index[0] if len(format_stats) > 0 else "N/A"
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.info(f"**💡 Concept**\n\n{best_concept}")
+            with col2:
+                st.info(f"**📌 USP**\n\n{best_usp}")
+            with col3:
+                st.info(f"**👤 Persona**\n\n{best_persona}")
+            with col4:
+                st.info(f"**🎬 Format**\n\n{best_format}")
+            
+            # Combo gagnant complet
+            combo_ccpt = best_concept.replace(' ', '-') if best_concept != "N/A" else "?"
+            combo_usp = best_usp.replace(' ', '-') if best_usp != "N/A" else "?"
+            combo_persona = best_persona.replace(' ', '-') if best_persona != "N/A" else "?"
+            st.success(f"**🏆 Combo gagnant:** {best_format}_CCPT-{combo_ccpt}_USP-{combo_usp}_PERSONA-{combo_persona}")
+            
+            # LIGNE 5: Analyses croisées
+            col_matrix1, col_matrix2 = st.columns(2)
+            
+            with col_matrix1:
+                with st.expander("📊 Matrice Concept × USP", expanded=False):
+                    pivot_concept_usp = df_analyse.pivot_table(
+                        index='concept', 
+                        columns='usp', 
+                        values='roas', 
+                        aggfunc='mean'
+                    ).round(2)
+                    if len(pivot_concept_usp) > 0:
+                        st.write("**ROAS moyen par Concept × USP:**")
+                        st.dataframe(pivot_concept_usp, use_container_width=True)
+                    else:
+                        st.info("Pas assez de données.")
+            
+            with col_matrix2:
+                with st.expander("📊 Matrice Persona × Concept", expanded=False):
+                    pivot_persona_concept = df_analyse.pivot_table(
+                        index='persona', 
+                        columns='concept', 
+                        values='roas', 
+                        aggfunc='mean'
+                    ).round(2)
+                    if len(pivot_persona_concept) > 0:
+                        st.write("**ROAS moyen par Persona × Concept:**")
+                        st.dataframe(pivot_persona_concept, use_container_width=True)
+                    else:
+                        st.info("Pas assez de données.")
+            
+            # LIGNE 6: Liste des créatives non conformes
+            if non_conformes > 0:
+                with st.expander(f"🔧 Créatives non conformes ({non_conformes})", expanded=False):
+                    st.warning("Ces créatives ne respectent pas la nomenclature et sont classées 'Autre' dans les analyses.")
+                    df_non_conformes = df[df['nomenclature_valide'] == False][['nom', 'nomenclature_erreurs', 'depense', 'roas']].copy()
+                    df_non_conformes.columns = ['Nom créative', 'Erreurs', 'Dépense €', 'ROAS']
+                    st.dataframe(df_non_conformes, use_container_width=True)
     
     # ========== TAB 4: Tableau détaillé ==========
     with tab4:
@@ -1617,7 +1831,7 @@ def main():
         col_filters, col_reset = st.columns([5, 1])
         
         with col_filters:
-            filter_cols = st.columns(6)
+            filter_cols = st.columns(7)
             with filter_cols[0]:
                 show_scale = st.checkbox(f"🚀 Scale ({scale_count})", value=True, key="filter_scale")
             with filter_cols[1]:
@@ -1629,6 +1843,13 @@ def main():
             with filter_cols[4]:
                 format_options = list(df['format'].unique())
                 format_filter = st.multiselect("Format", options=format_options, default=format_options, label_visibility="collapsed")
+            with filter_cols[5]:
+                persona_options = list(df['persona'].unique())
+                persona_filter = st.multiselect("Persona", options=persona_options, default=persona_options, label_visibility="collapsed")
+            with filter_cols[6]:
+                # Filtre conformité nomenclature
+                conformite_options = ["✅ Conforme", "❌ Non conforme"]
+                conformite_filter = st.multiselect("Nomenclature", options=conformite_options, default=conformite_options, label_visibility="collapsed")
         
         with col_reset:
             if st.button("🔄 Reset", use_container_width=True):
@@ -1679,9 +1900,18 @@ def main():
         with col_freq:
             max_frequency = st.number_input("Frequency ≤", min_value=1.0, max_value=10.0, value=10.0, step=0.5)
         
+        # Construire le filtre de conformité
+        conformite_valeurs = []
+        if "✅ Conforme" in conformite_filter:
+            conformite_valeurs.append(True)
+        if "❌ Non conforme" in conformite_filter:
+            conformite_valeurs.append(False)
+        
         # ===== APPLIQUER LES FILTRES =====
         filtered_df = df[
             (df['format'].isin(format_filter)) &
+            (df['persona'].isin(persona_filter)) &
+            (df['nomenclature_valide'].isin(conformite_valeurs)) &
             (df['action'].isin(action_filter)) &
             (df['roas'] >= min_roas) &
             (df['scale_potential'] >= min_potential) &
