@@ -1749,7 +1749,7 @@ def main():
                     'roas': 'mean', 'scale_potential': 'mean'
                 }).round(2)
                 date_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'Potentiel']
-                date_stats = date_stats.sort_values(date_stats.index, ascending=False)
+                date_stats = date_stats.sort_index(ascending=False)
                 st.dataframe(date_stats, use_container_width=True)
             
             st.divider()
