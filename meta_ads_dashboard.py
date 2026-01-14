@@ -1874,14 +1874,14 @@ def main():
                 show_pause = st.checkbox(f"⏸️ Pause ({pause_count})", value=True, key="filter_pause")
             with filter_cols[4]:
                 format_options = list(df['format'].unique())
-                format_filter = st.multiselect("Format", options=format_options, default=format_options, label_visibility="collapsed")
+                format_filter = st.multiselect("Format", options=format_options, placeholder="Tous formats", label_visibility="collapsed")
             with filter_cols[5]:
                 persona_options = list(df['persona'].unique())
-                persona_filter = st.multiselect("Persona", options=persona_options, default=persona_options, label_visibility="collapsed")
+                persona_filter = st.multiselect("Persona", options=persona_options, placeholder="Tous personas", label_visibility="collapsed")
             with filter_cols[6]:
                 # Filtre conformité nomenclature
                 conformite_options = ["✅ Conforme", "❌ Non conforme"]
-                conformite_filter = st.multiselect("Nomenclature", options=conformite_options, default=conformite_options, label_visibility="collapsed")
+                conformite_filter = st.multiselect("Nomenclature", options=conformite_options, placeholder="Tous", label_visibility="collapsed")
         
         with col_reset:
             if st.button("🔄 Reset", use_container_width=True):
@@ -1892,10 +1892,10 @@ def main():
         col_camp_filter, col_aud_filter = st.columns(2)
         with col_camp_filter:
             campagne_options = list(df['campagne'].unique())
-            campagne_filter = st.multiselect("📢 Campagne", options=campagne_options, default=campagne_options, label_visibility="visible")
+            campagne_filter = st.multiselect("📢 Campagne", options=campagne_options, placeholder="Toutes campagnes", label_visibility="visible")
         with col_aud_filter:
             audience_options = list(df['audience'].unique())
-            audience_filter = st.multiselect("🎯 Audience", options=audience_options, default=audience_options, label_visibility="visible")
+            audience_filter = st.multiselect("🎯 Audience", options=audience_options, placeholder="Toutes audiences", label_visibility="visible")
         
         # Construire le filtre d'action
         action_filter = []
@@ -1941,24 +1941,47 @@ def main():
         with col_freq:
             max_frequency = st.number_input("Frequency ≤", min_value=1.0, max_value=10.0, value=10.0, step=0.5)
         
-        # Construire le filtre de conformité
-        conformite_valeurs = []
-        if "✅ Conforme" in conformite_filter:
-            conformite_valeurs.append(True)
-        if "❌ Non conforme" in conformite_filter:
-            conformite_valeurs.append(False)
+        # Construire le filtre de conformité (vide = tout afficher)
+        if len(conformite_filter) == 0:
+            conformite_valeurs = [True, False]  # Tout
+        else:
+            conformite_valeurs = []
+            if "✅ Conforme" in conformite_filter:
+                conformite_valeurs.append(True)
+            if "❌ Non conforme" in conformite_filter:
+                conformite_valeurs.append(False)
         
         # ===== APPLIQUER LES FILTRES =====
-        filtered_df = df[
-            (df['format'].isin(format_filter)) &
-            (df['persona'].isin(persona_filter)) &
-            (df['campagne'].isin(campagne_filter)) &
-            (df['audience'].isin(audience_filter)) &
-            (df['nomenclature_valide'].isin(conformite_valeurs)) &
-            (df['action'].isin(action_filter)) &
-            (df['roas'] >= min_roas) &
-            (df['scale_potential'] >= min_potential) &
-            (df['frequency'] <= max_frequency)
+        # Logique: si le filtre est vide, on affiche tout (pas de contrainte)
+        filtered_df = df.copy()
+        
+        # Filtre Format (vide = tout)
+        if len(format_filter) > 0:
+            filtered_df = filtered_df[filtered_df['format'].isin(format_filter)]
+        
+        # Filtre Persona (vide = tout)
+        if len(persona_filter) > 0:
+            filtered_df = filtered_df[filtered_df['persona'].isin(persona_filter)]
+        
+        # Filtre Campagne (vide = tout)
+        if len(campagne_filter) > 0:
+            filtered_df = filtered_df[filtered_df['campagne'].isin(campagne_filter)]
+        
+        # Filtre Audience (vide = tout)
+        if len(audience_filter) > 0:
+            filtered_df = filtered_df[filtered_df['audience'].isin(audience_filter)]
+        
+        # Filtre Conformité nomenclature
+        filtered_df = filtered_df[filtered_df['nomenclature_valide'].isin(conformite_valeurs)]
+        
+        # Filtre Action (checkboxes)
+        filtered_df = filtered_df[filtered_df['action'].isin(action_filter)]
+        
+        # Filtres numériques
+        filtered_df = filtered_df[
+            (filtered_df['roas'] >= min_roas) &
+            (filtered_df['scale_potential'] >= min_potential) &
+            (filtered_df['frequency'] <= max_frequency)
         ]
         
         if search_query:
