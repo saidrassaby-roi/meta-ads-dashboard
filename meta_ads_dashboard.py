@@ -2519,7 +2519,7 @@ def main():
         </div>
         """, unsafe_allow_html=True)
         
-        # ===== TABLEAU AVEC LIGNES ALTERNÉES =====
+        # ===== TABLEAU AVEC ST.DATAFRAME =====
         if filtered_creatives == 0:
             st.markdown(f"""
             <div style="padding:3rem; text-align:center; background:{COLORS['bg_secondary']}; border-radius:12px; border:1px dashed {COLORS['border']};">
@@ -2529,205 +2529,94 @@ def main():
             </div>
             """, unsafe_allow_html=True)
         else:
-            # Fonction pour formater le grade en badge simplifié
-            def format_grade_badge(score):
+            # Préparer le dataframe pour l'affichage
+            display_df = filtered_df.copy()
+            roas_seuil = display_df['roas_seuil'].iloc[0] if 'roas_seuil' in display_df.columns else 2.5
+            
+            # Format avec emoji
+            def format_type_emoji(fmt):
+                emojis = {'IMG': '🖼️', 'VID': '🎬', 'CAR': '🎠', 'GIF': '✨', 'UGC': '👤', 'STO': '📱'}
+                return f"{emojis.get(fmt, '📄')} {fmt}"
+            
+            def format_grade_simple(score):
                 grade = get_grade(score)
-                colors = {'A': '#22c55e', 'B': '#84cc16', 'C': '#f0b429', 'D': '#f97316', 'F': '#ef4444'}
-                color = colors.get(grade, COLORS['text_muted'])
-                return f'<div style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; background:{color}20; color:{color}; border-radius:8px; font-weight:700; font-size:0.9rem;">{grade}</div><div style="color:{COLORS["text_muted"]}; font-size:0.7rem; margin-top:2px;">{score}</div>'
+                icons = {'A': '🟢', 'B': '🟢', 'C': '🟡', 'D': '🟠', 'F': '🔴'}
+                return f"{icons.get(grade, '⚪')} {grade} ({score})"
             
-            def format_trend_badge(value):
+            def format_trend_simple(value):
                 if value > 15:
-                    return f'<span style="color:#22c55e; font-weight:600;">▲ +{value:.0f}%</span>'
+                    return f"🟢 +{value:.0f}%"
                 elif value > 0:
-                    return f'<span style="color:#84cc16;">+{value:.0f}%</span>'
+                    return f"↗️ +{value:.0f}%"
                 elif value < -15:
-                    return f'<span style="color:#ef4444; font-weight:600;">▼ {value:.0f}%</span>'
+                    return f"🔴 {value:.0f}%"
                 elif value < 0:
-                    return f'<span style="color:#f97316;">{value:.0f}%</span>'
-                else:
-                    return f'<span style="color:{COLORS["text_muted"]};">0%</span>'
+                    return f"↘️ {value:.0f}%"
+                return "➖ 0%"
             
-            def format_profit_badge(is_profitable, profit):
-                if is_profitable:
-                    return f'<span style="color:#22c55e; font-weight:600;">+{profit:,.0f}€</span>'
-                else:
-                    return f'<span style="color:#ef4444;">{profit:,.0f}€</span>'
-            
-            def format_roas_badge(roas, seuil):
+            def format_roas_simple(roas, seuil):
                 if roas >= seuil * 1.5:
-                    return f'<span style="color:#22c55e; font-weight:600;">{roas:.2f}</span>'
+                    return f"🟢 {roas:.2f}"
                 elif roas >= seuil:
-                    return f'<span style="color:#84cc16;">{roas:.2f}</span>'
+                    return f"🟡 {roas:.2f}"
                 elif roas > 0:
-                    return f'<span style="color:#ef4444;">{roas:.2f}</span>'
-                else:
-                    return f'<span style="color:{COLORS["text_muted"]};">-</span>'
+                    return f"🔴 {roas:.2f}"
+                return "➖"
             
-            def format_action_badge(action):
-                badges = {
-                    'scale': f'<span style="background:#22c55e20; color:#22c55e; padding:4px 8px; border-radius:6px; font-size:0.75rem; font-weight:600;">SCALE</span>',
-                    'test': f'<span style="background:#3b82f620; color:#3b82f6; padding:4px 8px; border-radius:6px; font-size:0.75rem; font-weight:600;">TEST</span>',
-                    'monitor': f'<span style="background:#f0b42920; color:#f0b429; padding:4px 8px; border-radius:6px; font-size:0.75rem; font-weight:600;">WATCH</span>',
-                    'pause': f'<span style="background:#ef444420; color:#ef4444; padding:4px 8px; border-radius:6px; font-size:0.75rem; font-weight:600;">PAUSE</span>'
-                }
-                return badges.get(action, '')
+            def format_profit_simple(is_profitable, profit):
+                if is_profitable:
+                    return f"✅ +{profit:,.0f}€"
+                return f"❌ {profit:,.0f}€"
             
-            def format_potential_bar(value):
-                color = '#22c55e' if value >= 70 else '#f0b429' if value >= 50 else '#ef4444'
-                return f'''
-                <div style="display:flex; align-items:center; gap:6px;">
-                    <div style="flex:1; background:{COLORS['bg_tertiary']}; border-radius:4px; height:8px; overflow:hidden;">
-                        <div style="width:{value}%; height:100%; background:{color}; border-radius:4px;"></div>
-                    </div>
-                    <span style="color:{COLORS['text_secondary']}; font-size:0.75rem; min-width:28px;">{value}</span>
-                </div>
-                '''
+            def format_action_simple(action):
+                icons = {'scale': '🚀 SCALE', 'test': '⚡ TEST', 'monitor': '👁️ WATCH', 'pause': '⏸️ PAUSE'}
+                return icons.get(action, action)
             
-            # Construire le tableau HTML avec lignes alternées
-            roas_seuil = filtered_df['roas_seuil'].iloc[0] if 'roas_seuil' in filtered_df.columns else 2.5
+            # Construire les colonnes
+            display_df['Type'] = display_df['format'].apply(format_type_emoji)
+            display_df['Nom'] = display_df['nom'].apply(lambda x: x[:50] + '...' if len(x) > 50 else x)
+            display_df['Score'] = display_df['score_global'].apply(format_grade_simple)
+            display_df['Trend'] = display_df['trend_score'].apply(format_trend_simple) if has_daily else "➖"
+            display_df['ROAS'] = display_df['roas'].apply(lambda x: format_roas_simple(x, roas_seuil))
+            display_df['Profit'] = display_df.apply(lambda r: format_profit_simple(r.get('is_profitable', False), r.get('profit_estime', 0)), axis=1)
+            display_df['CTR'] = display_df['ctr_lien'].apply(lambda x: f"{x:.2f}%")
+            display_df['Dép.'] = display_df['depense'].apply(lambda x: f"{x:.0f}€")
+            display_df['Action'] = display_df['action'].apply(format_action_simple)
             
-            # En-tête du tableau
-            table_html = f"""
-            <style>
-                .custom-table {{ 
-                    width:100%; 
-                    border-collapse:separate; 
-                    border-spacing:0 4px;
-                    font-size:0.85rem;
-                }}
-                .custom-table th {{
-                    text-align:left;
-                    padding:12px 8px;
-                    color:{COLORS['text_muted']};
-                    font-weight:600;
-                    font-size:0.75rem;
-                    text-transform:uppercase;
-                    letter-spacing:0.5px;
-                    border-bottom:1px solid {COLORS['border']};
-                }}
-                .custom-table td {{
-                    padding:10px 8px;
-                    color:{COLORS['text_primary']};
-                    vertical-align:middle;
-                }}
-                .custom-table tr.row-even td {{
-                    background:{COLORS['bg_secondary']};
-                }}
-                .custom-table tr.row-odd td {{
-                    background:{COLORS['bg_tertiary']};
-                }}
-                .custom-table tr.row-even td:first-child {{
-                    border-radius:8px 0 0 8px;
-                }}
-                .custom-table tr.row-even td:last-child {{
-                    border-radius:0 8px 8px 0;
-                }}
-                .custom-table tr.row-odd td:first-child {{
-                    border-radius:8px 0 0 8px;
-                }}
-                .custom-table tr.row-odd td:last-child {{
-                    border-radius:0 8px 8px 0;
-                }}
-                .custom-table tr:hover td {{
-                    background:{COLORS['bg_tertiary']} !important;
-                    cursor:pointer;
-                }}
-                .creative-name {{
-                    max-width:280px;
-                    overflow:hidden;
-                    text-overflow:ellipsis;
-                    white-space:nowrap;
-                }}
-                .creative-name:hover {{
-                    white-space:normal;
-                    word-break:break-all;
-                }}
-            </style>
-            <table class="custom-table">
-                <thead>
-                    <tr>
-                        <th style="width:50px;">Fmt</th>
-                        <th style="width:280px;">Nom créative</th>
-                        <th style="width:60px; text-align:center;">Score</th>
-                        <th style="width:70px; text-align:right;">Trend</th>
-                        <th style="width:60px; text-align:right;">ROAS</th>
-                        <th style="width:80px; text-align:right;">Profit</th>
-                        <th style="width:60px; text-align:right;">CTR</th>
-                        <th style="width:70px; text-align:right;">Dép.</th>
-                        <th style="width:120px;">Potentiel</th>
-                        <th style="width:70px; text-align:center;">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-            """
+            # Sélectionner les colonnes
+            columns_display = ['Type', 'Nom', 'Score', 'Trend', 'ROAS', 'Profit', 'CTR', 'Dép.', 'scale_potential', 'Action']
+            final_df = display_df[columns_display].copy()
+            final_df = final_df.rename(columns={'scale_potential': 'Pot.'})
             
-            # Lignes du tableau
-            for idx, (_, row) in enumerate(filtered_df.head(50).iterrows()):
-                row_class = "row-even" if idx % 2 == 0 else "row-odd"
-                
-                # Format badge
-                format_colors = {'IMG': '#3b82f6', 'VID': '#8b5cf6', 'CAR': '#f97316', 'GIF': '#22c55e', 'UGC': '#ec4899', 'STO': '#06b6d4'}
-                fmt_color = format_colors.get(row['format'], COLORS['text_muted'])
-                fmt_badge = f'<span style="background:{fmt_color}20; color:{fmt_color}; padding:2px 6px; border-radius:4px; font-weight:600; font-size:0.75rem;">{row["format"]}</span>'
-                
-                # Nom tronqué
-                nom_display = row['nom'][:45] + '...' if len(row['nom']) > 45 else row['nom']
-                
-                # Score badge
-                score_badge = format_grade_badge(row['score_global'])
-                
-                # Trend
-                trend_val = row['trend_score'] if has_daily else 0
-                trend_badge = format_trend_badge(trend_val)
-                
-                # ROAS
-                roas_badge = format_roas_badge(row['roas'], roas_seuil)
-                
-                # Profit
-                profit_badge = format_profit_badge(row.get('is_profitable', False), row.get('profit_estime', 0))
-                
-                # CTR
-                ctr_val = row['ctr_lien']
-                ctr_color = '#22c55e' if ctr_val > 2 else '#f0b429' if ctr_val > 1 else COLORS['text_secondary']
-                ctr_display = f'<span style="color:{ctr_color};">{ctr_val:.2f}%</span>'
-                
-                # Dépense
-                dep_display = f'{row["depense"]:.0f}€'
-                
-                # Potentiel bar
-                potential_bar = format_potential_bar(row['scale_potential'])
-                
-                # Action badge
-                action_badge = format_action_badge(row['action'])
-                
-                table_html += f"""
-                <tr class="{row_class}">
-                    <td>{fmt_badge}</td>
-                    <td class="creative-name" title="{row['nom']}">{nom_display}</td>
-                    <td style="text-align:center;">{score_badge}</td>
-                    <td style="text-align:right;">{trend_badge}</td>
-                    <td style="text-align:right;">{roas_badge}</td>
-                    <td style="text-align:right;">{profit_badge}</td>
-                    <td style="text-align:right;">{ctr_display}</td>
-                    <td style="text-align:right; color:{COLORS['text_secondary']};">{dep_display}</td>
-                    <td>{potential_bar}</td>
-                    <td style="text-align:center;">{action_badge}</td>
-                </tr>
-                """
+            # Configuration des colonnes
+            column_config = {
+                "Type": st.column_config.TextColumn("Type", width=70),
+                "Nom": st.column_config.TextColumn("Nom créative", width=300),
+                "Score": st.column_config.TextColumn("Score", width=100),
+                "Trend": st.column_config.TextColumn("Trend", width=80),
+                "ROAS": st.column_config.TextColumn("ROAS", width=80),
+                "Profit": st.column_config.TextColumn("Profit", width=100),
+                "CTR": st.column_config.TextColumn("CTR", width=65),
+                "Dép.": st.column_config.TextColumn("Dépense", width=70),
+                "Pot.": st.column_config.ProgressColumn("Potentiel", format="%d", min_value=0, max_value=100, width=100),
+                "Action": st.column_config.TextColumn("Action", width=100),
+            }
             
-            table_html += "</tbody></table>"
+            # Hauteur dynamique
+            table_height = min(500, max(250, 45 + len(final_df) * 38))
             
-            # Afficher le tableau custom
-            st.markdown(table_html, unsafe_allow_html=True)
+            # Afficher
+            st.dataframe(
+                final_df,
+                use_container_width=True,
+                height=table_height,
+                column_config=column_config,
+                hide_index=True
+            )
             
-            # Message si plus de 50 lignes
-            if len(filtered_df) > 50:
-                st.markdown(f"""
-                <div style="text-align:center; padding:1rem; color:{COLORS['text_muted']}; font-size:0.85rem;">
-                    Affichage des 50 premières créatives sur {len(filtered_df)} · Utilisez les filtres pour affiner
-                </div>
-                """, unsafe_allow_html=True)
+            # Message si tronqué
+            if len(filtered_df) > 100:
+                st.caption(f"📊 Affichage limité aux 100 premières créatives sur {len(filtered_df)}")
         
         # ===== BOUTONS D'ACTION =====
         st.markdown("<div style='height:1rem;'></div>", unsafe_allow_html=True)
