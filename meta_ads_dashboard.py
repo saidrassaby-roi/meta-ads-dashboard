@@ -1609,6 +1609,14 @@ def main():
         st.divider()
         st.header("⚙️ Paramètres")
         min_impressions = st.slider("Impressions minimum", 0, 10000, 500, 100)
+        min_depense = st.slider(
+            "Dépense minimum (€)", 
+            min_value=0, 
+            max_value=500, 
+            value=0, 
+            step=5,
+            help="Filtre les créatives avec une dépense >= à ce seuil. Les scores sont recalculés uniquement sur les créatives filtrées."
+        )
         
         st.divider()
         st.subheader("💵 Rentabilité")
@@ -1640,6 +1648,10 @@ def main():
         df = load_and_process_data(uploaded_main)
         df = df[df['impressions'] >= min_impressions]
         
+        # Filtre dépense minimum (appliqué AVANT le calcul des scores)
+        if min_depense > 0:
+            df = df[df['depense'] >= min_depense]
+        
         if len(df) == 0:
             st.warning("⚠️ Aucune créative ne correspond aux filtres.")
             return
@@ -1670,6 +1682,10 @@ def main():
     
     if has_daily:
         st.success("✅ Données quotidiennes chargées - Tendances et sparklines activées")
+    
+    # Message informatif si filtre dépense actif
+    if min_depense > 0:
+        st.info(f"🎚️ **Filtre actif** : Dépense ≥ {min_depense}€ · **{len(df)}** créatives · Scores recalculés sur ce périmètre")
     
     # Tabs
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -2573,8 +2589,8 @@ def main():
                 return icons.get(action, action)
             
             # Construire les colonnes
-            display_df['Type'] = display_df['format'].apply(format_type_emoji)
-            display_df['Nom'] = display_df['nom'].apply(lambda x: x[:50] + '...' if len(x) > 50 else x)
+            display_df['Type'] = display_df['format']  # Juste le code format (plus compact)
+            display_df['Nom'] = display_df['nom']  # Nom complet
             display_df['Score'] = display_df['score_global'].apply(format_grade_simple)
             display_df['Trend'] = display_df['trend_score'].apply(format_trend_simple) if has_daily else "➖"
             display_df['ROAS'] = display_df['roas'].apply(lambda x: format_roas_simple(x, roas_seuil))
@@ -2583,27 +2599,27 @@ def main():
             display_df['Dép.'] = display_df['depense'].apply(lambda x: f"{x:.0f}€")
             display_df['Action'] = display_df['action'].apply(format_action_simple)
             
-            # Sélectionner les colonnes
+            # Sélectionner les colonnes (ordre optimisé pour voir le nom)
             columns_display = ['Type', 'Nom', 'Score', 'Trend', 'ROAS', 'Profit', 'CTR', 'Dép.', 'scale_potential', 'Action']
             final_df = display_df[columns_display].copy()
             final_df = final_df.rename(columns={'scale_potential': 'Pot.'})
             
-            # Configuration des colonnes
+            # Configuration des colonnes - NOM très large, autres colonnes compactes
             column_config = {
-                "Type": st.column_config.TextColumn("Type", width=70),
-                "Nom": st.column_config.TextColumn("Nom créative", width=300),
-                "Score": st.column_config.TextColumn("Score", width=100),
-                "Trend": st.column_config.TextColumn("Trend", width=80),
-                "ROAS": st.column_config.TextColumn("ROAS", width=80),
-                "Profit": st.column_config.TextColumn("Profit", width=100),
-                "CTR": st.column_config.TextColumn("CTR", width=65),
-                "Dép.": st.column_config.TextColumn("Dépense", width=70),
-                "Pot.": st.column_config.ProgressColumn("Potentiel", format="%d", min_value=0, max_value=100, width=100),
-                "Action": st.column_config.TextColumn("Action", width=100),
+                "Type": st.column_config.TextColumn("Fmt", width=45),
+                "Nom": st.column_config.TextColumn("Nom de la créative", width=450),  # Largeur fixe importante
+                "Score": st.column_config.TextColumn("📊", width=75, help="Score global"),
+                "Trend": st.column_config.TextColumn("📈", width=65, help="Tendance"),
+                "ROAS": st.column_config.TextColumn("💰", width=55, help="ROAS"),
+                "Profit": st.column_config.TextColumn("💵", width=75, help="Profit estimé"),
+                "CTR": st.column_config.TextColumn("👆", width=55, help="CTR"),
+                "Dép.": st.column_config.TextColumn("€", width=50, help="Dépense"),
+                "Pot.": st.column_config.ProgressColumn("🎯", format="%d", min_value=0, max_value=100, width=70, help="Potentiel"),
+                "Action": st.column_config.TextColumn("⚡", width=80, help="Action recommandée"),
             }
             
             # Hauteur dynamique
-            table_height = min(500, max(250, 45 + len(final_df) * 38))
+            table_height = min(550, max(300, 50 + len(final_df) * 40))
             
             # Afficher
             st.dataframe(
@@ -2613,6 +2629,46 @@ def main():
                 column_config=column_config,
                 hide_index=True
             )
+            
+            # Section détails créative
+            st.markdown(f"<div style='margin-top:1rem;'></div>", unsafe_allow_html=True)
+            with st.expander("🔍 Voir le nom complet d'une créative", expanded=False):
+                creative_select = st.selectbox(
+                    "Sélectionner une créative",
+                    options=filtered_df['nom'].tolist(),
+                    format_func=lambda x: f"{filtered_df[filtered_df['nom']==x]['format'].values[0]} | {x[:60]}...",
+                    label_visibility="collapsed"
+                )
+                if creative_select:
+                    selected_row = filtered_df[filtered_df['nom'] == creative_select].iloc[0]
+                    st.markdown(f"""
+                    <div style="background:{COLORS['bg_secondary']}; border:1px solid {COLORS['border']}; border-radius:12px; padding:1.25rem;">
+                        <div style="color:{COLORS['text_muted']}; font-size:0.75rem; text-transform:uppercase; margin-bottom:0.5rem;">Nom complet</div>
+                        <div style="color:{COLORS['text_primary']}; font-size:1rem; font-weight:500; word-break:break-all; line-height:1.5;">{creative_select}</div>
+                        <div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:1rem; margin-top:1rem; padding-top:1rem; border-top:1px solid {COLORS['border']};">
+                            <div>
+                                <div style="color:{COLORS['text_muted']}; font-size:0.7rem;">Format</div>
+                                <div style="color:{COLORS['text_primary']}; font-weight:600;">{selected_row['format']}</div>
+                            </div>
+                            <div>
+                                <div style="color:{COLORS['text_muted']}; font-size:0.7rem;">ROAS</div>
+                                <div style="color:{'#22c55e' if selected_row['roas'] >= roas_seuil else '#ef4444'}; font-weight:600;">{selected_row['roas']:.2f}</div>
+                            </div>
+                            <div>
+                                <div style="color:{COLORS['text_muted']}; font-size:0.7rem;">Profit</div>
+                                <div style="color:{'#22c55e' if selected_row.get('is_profitable', False) else '#ef4444'}; font-weight:600;">{selected_row.get('profit_estime', 0):+,.0f}€</div>
+                            </div>
+                            <div>
+                                <div style="color:{COLORS['text_muted']}; font-size:0.7rem;">Potentiel</div>
+                                <div style="color:{COLORS['text_primary']}; font-weight:600;">{selected_row['scale_potential']}/100</div>
+                            </div>
+                            <div>
+                                <div style="color:{COLORS['text_muted']}; font-size:0.7rem;">Action</div>
+                                <div style="color:{COLORS['accent_green'] if selected_row['action']=='scale' else COLORS['accent_blue'] if selected_row['action']=='test' else COLORS['accent_gold'] if selected_row['action']=='monitor' else COLORS['accent_red']}; font-weight:600;">{selected_row['action'].upper()}</div>
+                            </div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
             
             # Message si tronqué
             if len(filtered_df) > 100:
