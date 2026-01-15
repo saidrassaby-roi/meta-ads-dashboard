@@ -1951,138 +1951,217 @@ def main():
         
         # ===== RÉSUMÉ D'URGENCE =====
         if critical_alerts > 0:
-            st.error(f"🔴 **{critical_alerts} alerte(s) critique(s)** nécessitent une action immédiate")
+            st.markdown(f"""
+            <div class="alert-card">
+                <span style="font-size:1.1rem;">🔴 <strong>{critical_alerts} alerte(s) critique(s)</strong> nécessitent une action immédiate</span>
+            </div>
+            """, unsafe_allow_html=True)
         elif warning_alerts > 0:
-            st.warning(f"🟠 **{warning_alerts} alerte(s)** à surveiller")
+            st.markdown(f"""
+            <div class="warning-card">
+                <span style="font-size:1.1rem;">🟠 <strong>{warning_alerts} alerte(s)</strong> à surveiller</span>
+            </div>
+            """, unsafe_allow_html=True)
         else:
-            st.success("✅ **Aucune alerte critique** - Tout est sous contrôle")
+            st.markdown(f"""
+            <div class="success-card">
+                <span style="font-size:1.1rem;">✅ <strong>Aucune alerte critique</strong> - Tout est sous contrôle</span>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("<div style='height:1rem;'></div>", unsafe_allow_html=True)
         
         # ===== LAYOUT EN 4 COLONNES =====
         col1, col2, col3, col4 = st.columns(4)
         
         # --- Colonne 1: Alertes ---
         with col1:
-            st.markdown(f"##### 🔔 Alertes ({len(alerts)})")
+            st.markdown(f"""
+            <div style="margin-bottom:1rem;">
+                <span style="color:{COLORS['text_primary']}; font-size:1rem; font-weight:600;">🔔 Alertes</span>
+                <span style="background:{COLORS['accent_red']}; color:white; padding:2px 8px; border-radius:12px; font-size:0.75rem; margin-left:8px;">{len(alerts)}</span>
+            </div>
+            """, unsafe_allow_html=True)
             
             if alerts:
-                for alert in alerts[:5]:  # Max 5
-                    icon = "🔴" if alert['type'] == 'danger' else "🟠"
+                for alert in alerts[:5]:
+                    is_danger = alert['type'] == 'danger'
+                    accent_color = COLORS['accent_red'] if is_danger else COLORS['accent_gold']
+                    icon = "🔴" if is_danger else "🟠"
+                    
                     st.markdown(f"""
-                    <div style="padding:0.4rem 0.6rem; margin-bottom:0.3rem; border-left:3px solid {'#EF4444' if alert['type'] == 'danger' else '#F59E0B'}; background:{'#FEF2F2' if alert['type'] == 'danger' else '#FFFBEB'}; border-radius:4px; font-size:0.8rem;">
-                        {icon} <strong>{alert['title'][:20]}</strong><br>
-                        <span style="opacity:0.7;">{alert['creative'][:25]}...</span><br>
-                        <span style="font-size:0.7rem;">{alert['message'][:35]}...</span>
+                    <div style="padding:0.75rem; margin-bottom:0.5rem; border-left:3px solid {accent_color}; background:linear-gradient(90deg, rgba({239 if is_danger else 240}, {68 if is_danger else 180}, {68 if is_danger else 41}, 0.15) 0%, {COLORS['bg_secondary']} 100%); border-radius:8px;">
+                        <div style="display:flex; align-items:flex-start; gap:8px;">
+                            <span>{icon}</span>
+                            <div style="flex:1;">
+                                <div style="color:{COLORS['text_primary']}; font-weight:600; font-size:0.85rem; margin-bottom:4px;">{alert['title'][:25]}</div>
+                                <div style="color:{COLORS['text_secondary']}; font-size:0.75rem; margin-bottom:2px;">{alert['creative'][:30]}...</div>
+                                <div style="color:{COLORS['text_muted']}; font-size:0.7rem;">{alert['message'][:40]}...</div>
+                            </div>
+                        </div>
                     </div>
                     """, unsafe_allow_html=True)
                 if len(alerts) > 5:
-                    st.caption(f"... +{len(alerts) - 5} autre(s)")
+                    st.markdown(f"<div style='color:{COLORS['text_muted']}; font-size:0.75rem; margin-top:0.5rem;'>... +{len(alerts) - 5} autre(s)</div>", unsafe_allow_html=True)
             else:
-                st.markdown("""
-                <div style="padding:1rem; text-align:center; opacity:0.6;">
-                    ✅ Aucune alerte
+                st.markdown(f"""
+                <div style="padding:2rem 1rem; text-align:center; background:{COLORS['bg_secondary']}; border-radius:8px; border:1px solid {COLORS['border']};">
+                    <div style="font-size:2rem; margin-bottom:0.5rem;">✅</div>
+                    <div style="color:{COLORS['text_secondary']};">Aucune alerte</div>
                 </div>
                 """, unsafe_allow_html=True)
         
         # --- Colonne 2: Anomalies ---
         with col2:
-            st.markdown(f"##### ⚠️ Anomalies 24h ({len(anomalies)})")
+            st.markdown(f"""
+            <div style="margin-bottom:1rem;">
+                <span style="color:{COLORS['text_primary']}; font-size:1rem; font-weight:600;">⚠️ Anomalies 24h</span>
+                <span style="background:{COLORS['accent_orange']}; color:white; padding:2px 8px; border-radius:12px; font-size:0.75rem; margin-left:8px;">{len(anomalies)}</span>
+            </div>
+            """, unsafe_allow_html=True)
             
             if not has_daily:
-                st.caption("Chargez données quotidiennes")
+                st.markdown(f"""
+                <div style="padding:2rem 1rem; text-align:center; background:{COLORS['bg_secondary']}; border-radius:8px; border:1px dashed {COLORS['border']};">
+                    <div style="font-size:1.5rem; margin-bottom:0.5rem;">📊</div>
+                    <div style="color:{COLORS['text_muted']}; font-size:0.85rem;">Chargez les données quotidiennes pour voir les anomalies</div>
+                </div>
+                """, unsafe_allow_html=True)
             elif anomalies:
-                for anomaly in anomalies[:4]:  # Max 4
+                for anomaly in anomalies[:4]:
                     st.markdown(f"""
-                    <div style="padding:0.4rem 0.6rem; margin-bottom:0.3rem; border-left:3px solid #EF4444; background:#FEF2F2; border-radius:4px; font-size:0.8rem;">
-                        ⚠️ <strong>{anomaly['title'][:18]}</strong><br>
-                        <span style="opacity:0.7;">{anomaly['creative'][:22]}...</span><br>
-                        <span style="font-size:0.7rem;">{anomaly['message'][:40]}</span>
+                    <div style="padding:0.75rem; margin-bottom:0.5rem; border-left:3px solid {COLORS['accent_orange']}; background:linear-gradient(90deg, rgba(249, 115, 22, 0.15) 0%, {COLORS['bg_secondary']} 100%); border-radius:8px;">
+                        <div style="display:flex; align-items:flex-start; gap:8px;">
+                            <span>⚡</span>
+                            <div style="flex:1;">
+                                <div style="color:{COLORS['text_primary']}; font-weight:600; font-size:0.85rem; margin-bottom:4px;">{anomaly['title'][:22]}</div>
+                                <div style="color:{COLORS['text_secondary']}; font-size:0.75rem; margin-bottom:2px;">{anomaly['creative'][:25]}...</div>
+                                <div style="color:{COLORS['text_muted']}; font-size:0.7rem;">{anomaly['message'][:45]}</div>
+                            </div>
+                        </div>
                     </div>
                     """, unsafe_allow_html=True)
                 if len(anomalies) > 4:
-                    st.caption(f"... +{len(anomalies) - 4} autre(s)")
+                    st.markdown(f"<div style='color:{COLORS['text_muted']}; font-size:0.75rem; margin-top:0.5rem;'>... +{len(anomalies) - 4} autre(s)</div>", unsafe_allow_html=True)
             else:
-                st.markdown("""
-                <div style="padding:1rem; text-align:center; opacity:0.6;">
-                    ✅ Aucune anomalie
+                st.markdown(f"""
+                <div style="padding:2rem 1rem; text-align:center; background:{COLORS['bg_secondary']}; border-radius:8px; border:1px solid {COLORS['border']};">
+                    <div style="font-size:2rem; margin-bottom:0.5rem;">✅</div>
+                    <div style="color:{COLORS['text_secondary']};">Aucune anomalie</div>
                 </div>
                 """, unsafe_allow_html=True)
         
         # --- Colonne 3: Fatigue ---
         with col3:
-            st.markdown(f"##### 😴 Fatigue ({fatigued_soon} < 7j)")
+            fatigue_color = COLORS['accent_red'] if fatigued_critical > 0 else COLORS['accent_gold'] if fatigued_soon > 0 else COLORS['accent_green']
+            st.markdown(f"""
+            <div style="margin-bottom:1rem;">
+                <span style="color:{COLORS['text_primary']}; font-size:1rem; font-weight:600;">😴 Fatigue créative</span>
+                <span style="background:{fatigue_color}; color:white; padding:2px 8px; border-radius:12px; font-size:0.75rem; margin-left:8px;">{fatigued_soon} < 7j</span>
+            </div>
+            """, unsafe_allow_html=True)
             
             if not has_daily:
-                st.caption("Chargez données quotidiennes")
+                st.markdown(f"""
+                <div style="padding:2rem 1rem; text-align:center; background:{COLORS['bg_secondary']}; border-radius:8px; border:1px dashed {COLORS['border']};">
+                    <div style="font-size:1.5rem; margin-bottom:0.5rem;">📈</div>
+                    <div style="color:{COLORS['text_muted']}; font-size:0.85rem;">Chargez les données quotidiennes pour les prédictions</div>
+                </div>
+                """, unsafe_allow_html=True)
             elif fatigue_predictions:
-                # Afficher seulement les critiques et attention
                 urgent_fatigue = [p for p in fatigue_predictions if p['days_to_fatigue'] <= 14][:5]
                 
                 for p in urgent_fatigue:
                     if p['days_to_fatigue'] == 0:
-                        bg_color = "#FEF2F2"
-                        border_color = "#EF4444"
+                        accent = COLORS['accent_red']
                         days_text = "Fatiguée"
+                        badge_bg = "rgba(239, 68, 68, 0.2)"
                     elif p['days_to_fatigue'] <= 3:
-                        bg_color = "#FEF2F2"
-                        border_color = "#EF4444"
+                        accent = COLORS['accent_red']
                         days_text = f"{p['days_to_fatigue']}j"
+                        badge_bg = "rgba(239, 68, 68, 0.2)"
                     elif p['days_to_fatigue'] <= 7:
-                        bg_color = "#FFFBEB"
-                        border_color = "#F59E0B"
+                        accent = COLORS['accent_gold']
                         days_text = f"{p['days_to_fatigue']}j"
+                        badge_bg = "rgba(240, 180, 41, 0.2)"
                     else:
-                        bg_color = "#F0FDF4"
-                        border_color = "#10B981"
+                        accent = COLORS['accent_green']
                         days_text = f"{p['days_to_fatigue']}j"
+                        badge_bg = "rgba(34, 197, 94, 0.2)"
                     
                     st.markdown(f"""
-                    <div style="padding:0.4rem 0.6rem; margin-bottom:0.3rem; border-left:3px solid {border_color}; background:{bg_color}; border-radius:4px; font-size:0.8rem; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="padding:0.6rem 0.75rem; margin-bottom:0.5rem; border-left:3px solid {accent}; background:{COLORS['bg_secondary']}; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
                         <div>
-                            <strong>{p['format']}</strong> · {p['creative'][:18]}...<br>
-                            <span style="opacity:0.7; font-size:0.7rem;">Freq: {p['current_freq']:.2f}</span>
+                            <div style="color:{COLORS['text_primary']}; font-weight:600; font-size:0.85rem;">{p['format']} · {p['creative'][:18]}...</div>
+                            <div style="color:{COLORS['text_muted']}; font-size:0.7rem;">Freq: {p['current_freq']:.2f}</div>
                         </div>
-                        <div style="font-weight:700; color:{border_color};">{days_text}</div>
+                        <div style="background:{badge_bg}; color:{accent}; padding:4px 10px; border-radius:6px; font-weight:700; font-size:0.8rem;">{days_text}</div>
                     </div>
                     """, unsafe_allow_html=True)
                 
                 ok_count = len([p for p in fatigue_predictions if p['days_to_fatigue'] > 14])
                 if ok_count > 0:
-                    st.caption(f"✅ {ok_count} créa(s) OK (> 14j)")
+                    st.markdown(f"""
+                    <div style="margin-top:0.75rem; padding:0.5rem; background:rgba(34, 197, 94, 0.1); border-radius:6px; text-align:center;">
+                        <span style="color:{COLORS['accent_green']}; font-size:0.8rem;">✅ {ok_count} créa(s) OK (> 14j)</span>
+                    </div>
+                    """, unsafe_allow_html=True)
             else:
-                st.caption("Aucune prédiction")
+                st.markdown(f"""
+                <div style="padding:2rem 1rem; text-align:center; background:{COLORS['bg_secondary']}; border-radius:8px; border:1px solid {COLORS['border']};">
+                    <div style="color:{COLORS['text_muted']};">Aucune prédiction</div>
+                </div>
+                """, unsafe_allow_html=True)
         
         # --- Colonne 4: Diversification ---
         with col4:
             score = diversification_data['score']
-            score_color = "#10B981" if score >= 70 else "#F59E0B" if score >= 50 else "#EF4444"
-            score_bg = "#F0FDF4" if score >= 70 else "#FFFBEB" if score >= 50 else "#FEF2F2"
+            if score >= 70:
+                score_color = COLORS['accent_green']
+                score_bg = "rgba(34, 197, 94, 0.1)"
+            elif score >= 50:
+                score_color = COLORS['accent_gold']
+                score_bg = "rgba(240, 180, 41, 0.1)"
+            else:
+                score_color = COLORS['accent_red']
+                score_bg = "rgba(239, 68, 68, 0.1)"
             
-            st.markdown(f"##### 🎯 Diversification")
+            st.markdown(f"""
+            <div style="margin-bottom:1rem;">
+                <span style="color:{COLORS['text_primary']}; font-size:1rem; font-weight:600;">🎯 Diversification</span>
+            </div>
+            """, unsafe_allow_html=True)
             
             # Score avec jauge visuelle
             st.markdown(f"""
-            <div style="padding:0.6rem; background:{score_bg}; border-radius:8px; text-align:center; margin-bottom:0.5rem;">
-                <div style="font-size:1.8rem; font-weight:700; color:{score_color};">{score}</div>
-                <div style="font-size:0.75rem; opacity:0.8;">/100</div>
-                <div style="background:#E5E7EB; border-radius:4px; height:8px; margin-top:0.5rem;">
-                    <div style="background:{score_color}; width:{score}%; height:100%; border-radius:4px;"></div>
+            <div style="padding:1rem; background:{COLORS['bg_secondary']}; border-radius:12px; text-align:center; margin-bottom:0.75rem; border:1px solid {COLORS['border']};">
+                <div style="font-size:2.5rem; font-weight:700; color:{score_color};">{score}</div>
+                <div style="font-size:0.8rem; color:{COLORS['text_muted']};">/100</div>
+                <div style="background:{COLORS['bg_tertiary']}; border-radius:6px; height:8px; margin-top:0.75rem; overflow:hidden;">
+                    <div style="background:linear-gradient(90deg, {score_color} 0%, {score_color}80 100%); width:{score}%; height:100%; border-radius:6px; transition:width 0.5s ease;"></div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
             
             # Top concentrations
-            st.markdown("<div style='font-size:0.75rem;'><strong>Répartition budget:</strong></div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='color:{COLORS['text_secondary']}; font-size:0.8rem; font-weight:600; margin-bottom:0.5rem;'>Répartition budget:</div>", unsafe_allow_html=True)
             
             for usp, pct in sorted(diversification_data['by_usp'].items(), key=lambda x: -x[1])[:3]:
-                bar_color = "#10B981" if pct < 35 else "#F59E0B" if pct < 50 else "#EF4444"
+                if pct < 35:
+                    bar_color = COLORS['accent_green']
+                elif pct < 50:
+                    bar_color = COLORS['accent_gold']
+                else:
+                    bar_color = COLORS['accent_red']
+                
                 st.markdown(f"""
-                <div style="font-size:0.7rem; margin-bottom:0.2rem;">
-                    <div style="display:flex; justify-content:space-between;">
-                        <span>{usp[:15]}{'...' if len(usp) > 15 else ''}</span>
-                        <span style="font-weight:600;">{pct:.0f}%</span>
+                <div style="margin-bottom:0.5rem;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                        <span style="color:{COLORS['text_secondary']}; font-size:0.75rem;">{usp[:18]}{'...' if len(usp) > 18 else ''}</span>
+                        <span style="color:{COLORS['text_primary']}; font-weight:600; font-size:0.75rem;">{pct:.0f}%</span>
                     </div>
-                    <div style="background:#E5E7EB; border-radius:2px; height:4px;">
-                        <div style="background:{bar_color}; width:{min(pct, 100)}%; height:100%; border-radius:2px;"></div>
+                    <div style="background:{COLORS['bg_tertiary']}; border-radius:4px; height:6px; overflow:hidden;">
+                        <div style="background:{bar_color}; width:{min(pct, 100)}%; height:100%; border-radius:4px;"></div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -2090,8 +2169,8 @@ def main():
             # Alertes concentration
             if diversification_data['alerts']:
                 st.markdown(f"""
-                <div style="margin-top:0.5rem; padding:0.3rem 0.5rem; background:#FFFBEB; border-radius:4px; font-size:0.7rem;">
-                    ⚠️ {len(diversification_data['alerts'])} alerte(s) concentration
+                <div style="margin-top:0.75rem; padding:0.5rem 0.75rem; background:rgba(240, 180, 41, 0.1); border-radius:6px; border-left:3px solid {COLORS['accent_gold']};">
+                    <span style="color:{COLORS['accent_gold']}; font-size:0.75rem;">⚠️ {len(diversification_data['alerts'])} alerte(s) concentration</span>
                 </div>
                 """, unsafe_allow_html=True)
     
