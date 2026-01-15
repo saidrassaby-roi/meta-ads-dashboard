@@ -2375,49 +2375,71 @@ def main():
         if 'reset_filters' not in st.session_state:
             st.session_state.reset_filters = False
         
-        # ===== LIGNE 1: FILTRES RAPIDES PAR ACTION =====
+        # Compteurs d'actions
         action_counts = df['action'].value_counts()
         scale_count = action_counts.get('scale', 0)
         test_count = action_counts.get('test', 0)
         monitor_count = action_counts.get('monitor', 0)
         pause_count = action_counts.get('pause', 0)
         
-        col_filters, col_reset = st.columns([5, 1])
+        # ===== LIGNE 1: CHIPS FILTRES + RECHERCHE (CONDENSÉ) =====
+        st.markdown(f"""
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:1rem;">
+            <span style="color:{COLORS['text_muted']}; font-size:0.85rem; margin-right:8px;">Filtrer:</span>
+        </div>
+        """, unsafe_allow_html=True)
         
-        with col_filters:
-            filter_cols = st.columns(7)
-            with filter_cols[0]:
-                show_scale = st.checkbox(f"🚀 Scale ({scale_count})", value=True, key="filter_scale")
-            with filter_cols[1]:
-                show_test = st.checkbox(f"⚡ Test ({test_count})", value=True, key="filter_test")
-            with filter_cols[2]:
-                show_monitor = st.checkbox(f"👁️ Monitor ({monitor_count})", value=True, key="filter_monitor")
-            with filter_cols[3]:
-                show_pause = st.checkbox(f"⏸️ Pause ({pause_count})", value=True, key="filter_pause")
-            with filter_cols[4]:
+        col_chips, col_search, col_reset = st.columns([4, 2, 0.5])
+        
+        with col_chips:
+            chip_cols = st.columns(8)
+            with chip_cols[0]:
+                show_scale = st.checkbox(f"🚀 {scale_count}", value=True, key="filter_scale", help="Scale")
+            with chip_cols[1]:
+                show_test = st.checkbox(f"⚡ {test_count}", value=True, key="filter_test", help="Test")
+            with chip_cols[2]:
+                show_monitor = st.checkbox(f"👁️ {monitor_count}", value=True, key="filter_monitor", help="Monitor")
+            with chip_cols[3]:
+                show_pause = st.checkbox(f"⏸️ {pause_count}", value=True, key="filter_pause", help="Pause")
+            with chip_cols[4]:
                 format_options = list(df['format'].unique())
-                format_filter = st.multiselect("Format", options=format_options, placeholder="Tous formats", label_visibility="collapsed")
-            with filter_cols[5]:
+                format_filter = st.selectbox("Format", options=["Tous"] + format_options, label_visibility="collapsed")
+                format_filter = [] if format_filter == "Tous" else [format_filter]
+            with chip_cols[5]:
                 persona_options = list(df['persona'].unique())
-                persona_filter = st.multiselect("Persona", options=persona_options, placeholder="Tous personas", label_visibility="collapsed")
-            with filter_cols[6]:
-                # Filtre conformité nomenclature
-                conformite_options = ["✅ Conforme", "❌ Non conforme"]
-                conformite_filter = st.multiselect("Nomenclature", options=conformite_options, placeholder="Tous", label_visibility="collapsed")
+                persona_filter = st.selectbox("Persona", options=["Tous"] + persona_options, label_visibility="collapsed")
+                persona_filter = [] if persona_filter == "Tous" else [persona_filter]
+            with chip_cols[6]:
+                sort_by = st.selectbox("Tri", 
+                    options=['scale_potential', 'roas', 'depense', 'ctr_lien', 'trend_score'],
+                    format_func=lambda x: {'scale_potential': '🎯 Potentiel', 'roas': '💰 ROAS', 'depense': '💵 Dépense', 'ctr_lien': '👆 CTR', 'trend_score': '📈 Trend'}.get(x, x),
+                    label_visibility="collapsed")
+            with chip_cols[7]:
+                sort_order = st.selectbox("Ordre", ["↓", "↑"], label_visibility="collapsed")
+        
+        with col_search:
+            search_query = st.text_input("🔍", placeholder="Rechercher...", label_visibility="collapsed")
         
         with col_reset:
-            if st.button("🔄 Reset", use_container_width=True):
+            if st.button("🔄", help="Réinitialiser", use_container_width=True):
                 st.session_state.reset_filters = True
                 st.rerun()
         
-        # ===== LIGNE 1b: FILTRES CAMPAGNE / AUDIENCE =====
-        col_camp_filter, col_aud_filter = st.columns(2)
-        with col_camp_filter:
-            campagne_options = list(df['campagne'].unique())
-            campagne_filter = st.multiselect("📢 Campagne", options=campagne_options, placeholder="Toutes campagnes", label_visibility="visible")
-        with col_aud_filter:
-            audience_options = list(df['audience'].unique())
-            audience_filter = st.multiselect("🎯 Audience", options=audience_options, placeholder="Toutes audiences", label_visibility="visible")
+        # ===== FILTRES AVANCÉS (EXPANDER) =====
+        with st.expander("⚙️ Filtres avancés", expanded=False):
+            adv_col1, adv_col2, adv_col3, adv_col4, adv_col5 = st.columns(5)
+            with adv_col1:
+                campagne_options = list(df['campagne'].unique())
+                campagne_filter = st.multiselect("📢 Campagne", options=campagne_options, placeholder="Toutes")
+            with adv_col2:
+                audience_options = list(df['audience'].unique())
+                audience_filter = st.multiselect("🎯 Audience", options=audience_options, placeholder="Toutes")
+            with adv_col3:
+                min_roas = st.number_input("ROAS ≥", min_value=0.0, max_value=50.0, value=0.0, step=0.5)
+            with adv_col4:
+                min_potential = st.number_input("Potentiel ≥", min_value=0, max_value=100, value=0, step=5)
+            with adv_col5:
+                max_frequency = st.number_input("Frequency ≤", min_value=1.0, max_value=10.0, value=10.0, step=0.5)
         
         # Construire le filtre d'action
         action_filter = []
@@ -2426,80 +2448,19 @@ def main():
         if show_monitor: action_filter.append('monitor')
         if show_pause: action_filter.append('pause')
         
-        # ===== LIGNE 2: RECHERCHE + TRI + VUE =====
-        col_search, col_sort, col_order, col_view = st.columns([3, 1.5, 1, 1.5])
-        
-        with col_search:
-            search_query = st.text_input("🔍", placeholder="Rechercher une créative...", label_visibility="collapsed")
-        
-        with col_sort:
-            sort_by = st.selectbox("Trier", 
-                options=['scale_potential', 'score_global', 'roas', 'ctr_lien', 'depense', 'trend_score'],
-                format_func=lambda x: {
-                    'scale_potential': '🎯 Potentiel', 'score_global': '⭐ Score Global',
-                    'roas': '💰 ROAS', 'ctr_lien': '👆 CTR', 'depense': '💵 Dépense',
-                    'trend_score': '📈 Tendance'
-                }.get(x, x),
-                label_visibility="collapsed")
-        
-        with col_order:
-            sort_order = st.selectbox("Ordre", ["↓ Desc", "↑ Asc"], label_visibility="collapsed")
-        
-        with col_view:
-            view_mode = st.selectbox("Vue",
-                options=['complete', 'scores', 'metrics', 'minimal'],
-                format_func=lambda x: {
-                    'complete': '📊 Complète', 'scores': '🎯 Scores',
-                    'metrics': '📈 Métriques', 'minimal': '⚡ Minimale'
-                }.get(x, x),
-                label_visibility="collapsed")
-        
-        # ===== LIGNE 3: FILTRES AVANCÉS (inline) =====
-        col_roas, col_pot, col_freq = st.columns(3)
-        with col_roas:
-            min_roas = st.number_input("ROAS ≥", min_value=0.0, max_value=50.0, value=0.0, step=0.5, label_visibility="visible")
-        with col_pot:
-            min_potential = st.number_input("Potentiel ≥", min_value=0, max_value=100, value=0, step=5)
-        with col_freq:
-            max_frequency = st.number_input("Frequency ≤", min_value=1.0, max_value=10.0, value=10.0, step=0.5)
-        
-        # Construire le filtre de conformité (vide = tout afficher)
-        if len(conformite_filter) == 0:
-            conformite_valeurs = [True, False]  # Tout
-        else:
-            conformite_valeurs = []
-            if "✅ Conforme" in conformite_filter:
-                conformite_valeurs.append(True)
-            if "❌ Non conforme" in conformite_filter:
-                conformite_valeurs.append(False)
-        
         # ===== APPLIQUER LES FILTRES =====
-        # Logique: si le filtre est vide, on affiche tout (pas de contrainte)
         filtered_df = df.copy()
         
-        # Filtre Format (vide = tout)
         if len(format_filter) > 0:
             filtered_df = filtered_df[filtered_df['format'].isin(format_filter)]
-        
-        # Filtre Persona (vide = tout)
         if len(persona_filter) > 0:
             filtered_df = filtered_df[filtered_df['persona'].isin(persona_filter)]
-        
-        # Filtre Campagne (vide = tout)
         if len(campagne_filter) > 0:
             filtered_df = filtered_df[filtered_df['campagne'].isin(campagne_filter)]
-        
-        # Filtre Audience (vide = tout)
         if len(audience_filter) > 0:
             filtered_df = filtered_df[filtered_df['audience'].isin(audience_filter)]
         
-        # Filtre Conformité nomenclature
-        filtered_df = filtered_df[filtered_df['nomenclature_valide'].isin(conformite_valeurs)]
-        
-        # Filtre Action (checkboxes)
         filtered_df = filtered_df[filtered_df['action'].isin(action_filter)]
-        
-        # Filtres numériques
         filtered_df = filtered_df[
             (filtered_df['roas'] >= min_roas) &
             (filtered_df['scale_potential'] >= min_potential) &
@@ -2510,9 +2471,9 @@ def main():
             filtered_df = filtered_df[filtered_df['nom'].str.lower().str.contains(search_query.lower())]
         
         # Trier
-        filtered_df = filtered_df.sort_values(sort_by, ascending=(sort_order == "↑ Asc"))
+        filtered_df = filtered_df.sort_values(sort_by, ascending=(sort_order == "↑"))
         
-        # ===== LIGNE 4: KPIs DYNAMIQUES =====
+        # ===== KPIs EN CARDS VISUELLES =====
         total_creatives = len(df)
         filtered_creatives = len(filtered_df)
         
@@ -2521,162 +2482,257 @@ def main():
             total_spend = filtered_df['depense'].sum()
             avg_potential = filtered_df['scale_potential'].mean()
             avg_trend = filtered_df['trend_score'].mean() if has_daily else 0
-            
             filtered_scale = len(filtered_df[filtered_df['action'] == 'scale'])
             filtered_pause = len(filtered_df[filtered_df['action'] == 'pause'])
+            total_profit = filtered_df['profit_estime'].sum() if 'profit_estime' in filtered_df.columns else 0
         else:
-            avg_roas = 0
-            total_spend = 0
-            avg_potential = 0
-            avg_trend = 0
-            filtered_scale = 0
-            filtered_pause = 0
+            avg_roas = total_spend = avg_potential = avg_trend = filtered_scale = filtered_pause = total_profit = 0
         
-        # Afficher les KPIs
-        kpi_cols = st.columns(6)
-        with kpi_cols[0]:
-            st.metric("📊 Créatives", f"{filtered_creatives}/{total_creatives}")
-        with kpi_cols[1]:
-            st.metric("💰 ROAS moy.", f"{avg_roas:.2f}")
-        with kpi_cols[2]:
-            st.metric("💵 Dépense", f"{total_spend:,.0f}€")
-        with kpi_cols[3]:
-            st.metric("🎯 Potentiel moy.", f"{avg_potential:.0f}")
-        with kpi_cols[4]:
-            trend_delta = f"{avg_trend:+.0f}%" if has_daily else "N/A"
-            st.metric("📈 Tendance moy.", trend_delta if has_daily else "-")
-        with kpi_cols[5]:
-            st.metric("🚀 À scaler", f"{filtered_scale}", delta=f"{filtered_pause} pauses" if filtered_pause > 0 else None, delta_color="inverse" if filtered_pause > 0 else "off")
+        # KPI Cards HTML
+        st.markdown(f"""
+        <div style="display:grid; grid-template-columns:repeat(6, 1fr); gap:12px; margin:1rem 0;">
+            <div style="background:{COLORS['bg_secondary']}; border:1px solid {COLORS['border']}; border-radius:12px; padding:1rem; text-align:center;">
+                <div style="color:{COLORS['text_muted']}; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px;">Créatives</div>
+                <div style="color:{COLORS['text_primary']}; font-size:1.75rem; font-weight:700;">{filtered_creatives}<span style="font-size:1rem; color:{COLORS['text_muted']};">/{total_creatives}</span></div>
+            </div>
+            <div style="background:{COLORS['bg_secondary']}; border:2px solid {COLORS['accent_gold']}; border-radius:12px; padding:1rem; text-align:center; box-shadow:0 0 20px rgba(240,180,41,0.15);">
+                <div style="color:{COLORS['accent_gold']}; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px;">ROAS moy.</div>
+                <div style="color:{COLORS['text_primary']}; font-size:1.75rem; font-weight:700;">{avg_roas:.2f}</div>
+            </div>
+            <div style="background:{COLORS['bg_secondary']}; border:1px solid {COLORS['border']}; border-radius:12px; padding:1rem; text-align:center;">
+                <div style="color:{COLORS['text_muted']}; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px;">Dépense</div>
+                <div style="color:{COLORS['text_primary']}; font-size:1.75rem; font-weight:700;">{total_spend:,.0f}€</div>
+            </div>
+            <div style="background:{COLORS['bg_secondary']}; border:1px solid {COLORS['border']}; border-radius:12px; padding:1rem; text-align:center;">
+                <div style="color:{COLORS['text_muted']}; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px;">Potentiel</div>
+                <div style="color:{COLORS['text_primary']}; font-size:1.75rem; font-weight:700;">{avg_potential:.0f}</div>
+            </div>
+            <div style="background:{COLORS['bg_secondary']}; border:1px solid {COLORS['border']}; border-radius:12px; padding:1rem; text-align:center;">
+                <div style="color:{COLORS['text_muted']}; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px;">Tendance</div>
+                <div style="color:{'#22c55e' if avg_trend > 0 else '#ef4444' if avg_trend < 0 else COLORS['text_primary']}; font-size:1.75rem; font-weight:700;">{'+' if avg_trend > 0 else ''}{avg_trend:.0f}%</div>
+            </div>
+            <div style="background:{COLORS['bg_secondary']}; border:1px solid {'#22c55e' if filtered_scale > 0 else COLORS['border']}; border-radius:12px; padding:1rem; text-align:center;">
+                <div style="color:{COLORS['text_muted']}; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px;">À scaler</div>
+                <div style="color:{COLORS['accent_green']}; font-size:1.75rem; font-weight:700;">{filtered_scale}</div>
+                {'<div style="color:' + COLORS['accent_red'] + '; font-size:0.7rem;">' + str(filtered_pause) + ' pauses</div>' if filtered_pause > 0 else ''}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        # Fonction pour colorer les grades
-        def format_grade(score, variation=0):
-            grade = get_grade(score)
-            grade_colors = {'A': '🟢', 'B': '🟢', 'C': '🟡', 'D': '🟠', 'F': '🔴'}
-            icon = grade_colors.get(grade, '')
-            var_str = f" (+{variation})" if variation > 0 else f" ({variation})" if variation < 0 else ""
-            return f"{score} {icon}{grade}{var_str}"
-        
-        # Fonction pour colorer les tendances
-        def format_trend(value):
-            if value > 10:
-                return f"🟢 +{value:.0f}%"
-            elif value < -10:
-                return f"🔴 {value:.0f}%"
-            elif value != 0:
-                return f"⚪ {value:+.0f}%"
-            else:
-                return "⚪ 0%"
-        
-        # ===== TABLEAU PRINCIPAL =====
+        # ===== TABLEAU AVEC LIGNES ALTERNÉES =====
         if filtered_creatives == 0:
-            st.warning("⚠️ Aucune créative ne correspond aux filtres. Essayez de les réinitialiser.")
+            st.markdown(f"""
+            <div style="padding:3rem; text-align:center; background:{COLORS['bg_secondary']}; border-radius:12px; border:1px dashed {COLORS['border']};">
+                <div style="font-size:2rem; margin-bottom:1rem;">🔍</div>
+                <div style="color:{COLORS['text_secondary']};">Aucune créative ne correspond aux filtres</div>
+                <div style="color:{COLORS['text_muted']}; font-size:0.85rem; margin-top:0.5rem;">Essayez de modifier vos critères de recherche</div>
+            </div>
+            """, unsafe_allow_html=True)
         else:
-            # Préparer le dataframe pour l'affichage
-            display_df = filtered_df.copy()
+            # Fonction pour formater le grade en badge simplifié
+            def format_grade_badge(score):
+                grade = get_grade(score)
+                colors = {'A': '#22c55e', 'B': '#84cc16', 'C': '#f0b429', 'D': '#f97316', 'F': '#ef4444'}
+                color = colors.get(grade, COLORS['text_muted'])
+                return f'<div style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; background:{color}20; color:{color}; border-radius:8px; font-weight:700; font-size:0.9rem;">{grade}</div><div style="color:{COLORS["text_muted"]}; font-size:0.7rem; margin-top:2px;">{score}</div>'
             
-            # Colonnes de base
-            display_df['Nom'] = display_df['nom']
+            def format_trend_badge(value):
+                if value > 15:
+                    return f'<span style="color:#22c55e; font-weight:600;">▲ +{value:.0f}%</span>'
+                elif value > 0:
+                    return f'<span style="color:#84cc16;">+{value:.0f}%</span>'
+                elif value < -15:
+                    return f'<span style="color:#ef4444; font-weight:600;">▼ {value:.0f}%</span>'
+                elif value < 0:
+                    return f'<span style="color:#f97316;">{value:.0f}%</span>'
+                else:
+                    return f'<span style="color:{COLORS["text_muted"]};">0%</span>'
             
-            # Tendance formatée
-            if has_daily:
-                display_df['Tend.'] = display_df['trend_score'].apply(format_trend)
-            else:
-                display_df['Tend.'] = "-"
+            def format_profit_badge(is_profitable, profit):
+                if is_profitable:
+                    return f'<span style="color:#22c55e; font-weight:600;">+{profit:,.0f}€</span>'
+                else:
+                    return f'<span style="color:#ef4444;">{profit:,.0f}€</span>'
             
-            # Scores formatés avec grades colorés
-            display_df['Score💰'] = display_df.apply(
-                lambda r: format_grade(r['score_profitabilite'], r.get('var_profit', 0)), axis=1
-            )
-            display_df['Trafic'] = display_df.apply(
-                lambda r: format_grade(r['score_trafic'], r.get('var_trafic', 0)), axis=1
-            )
-            display_df['Notoriété'] = display_df.apply(
-                lambda r: format_grade(r['score_notoriete'], r.get('var_notoriete', 0)), axis=1
-            )
-            display_df['Global'] = display_df.apply(
-                lambda r: format_grade(r['score_global'], r.get('var_global', 0)), axis=1
-            )
+            def format_roas_badge(roas, seuil):
+                if roas >= seuil * 1.5:
+                    return f'<span style="color:#22c55e; font-weight:600;">{roas:.2f}</span>'
+                elif roas >= seuil:
+                    return f'<span style="color:#84cc16;">{roas:.2f}</span>'
+                elif roas > 0:
+                    return f'<span style="color:#ef4444;">{roas:.2f}</span>'
+                else:
+                    return f'<span style="color:{COLORS["text_muted"]};">-</span>'
             
-            # Métriques formatées
-            display_df['ROAS'] = display_df['roas'].apply(lambda x: f"{x:.2f}" if x > 0 else "-")
-            display_df['CTR'] = display_df['ctr_lien'].apply(lambda x: f"{x:.2f}%")
-            display_df['Dépense'] = display_df['depense'].apply(lambda x: f"{x:.0f}€")
-            display_df['Freq.'] = display_df['frequency'].apply(
-                lambda x: f"{'🔴' if x > 3 else '🟡' if x > 2 else '🟢'} {x:.2f}"
-            )
-            # CPMu avec couleur (plus bas = meilleur)
-            cpmu_mean = filtered_df['cpmu'].mean() if 'cpmu' in filtered_df.columns and len(filtered_df) > 0 else 0
-            display_df['CPMu'] = display_df['cpmu'].apply(
-                lambda x: f"{'🟢' if x < cpmu_mean * 0.8 else '🟡' if x < cpmu_mean * 1.5 else '🔴'} {x:.2f}€" if x > 0 else "-"
-            )
-            display_df['Conf.'] = display_df['coefficient_confiance'].apply(
-                lambda x: f"{'🟢' if x >= 0.7 else '🟡' if x >= 0.5 else '🔴'} {x*100:.0f}%"
-            )
+            def format_action_badge(action):
+                badges = {
+                    'scale': f'<span style="background:#22c55e20; color:#22c55e; padding:4px 8px; border-radius:6px; font-size:0.75rem; font-weight:600;">SCALE</span>',
+                    'test': f'<span style="background:#3b82f620; color:#3b82f6; padding:4px 8px; border-radius:6px; font-size:0.75rem; font-weight:600;">TEST</span>',
+                    'monitor': f'<span style="background:#f0b42920; color:#f0b429; padding:4px 8px; border-radius:6px; font-size:0.75rem; font-weight:600;">WATCH</span>',
+                    'pause': f'<span style="background:#ef444420; color:#ef4444; padding:4px 8px; border-radius:6px; font-size:0.75rem; font-weight:600;">PAUSE</span>'
+                }
+                return badges.get(action, '')
             
-            # Nouvelles colonnes V2.5 : Panier moyen et Profit estimé
-            panier_mean = filtered_df['panier_moyen'].mean() if 'panier_moyen' in filtered_df.columns and len(filtered_df) > 0 else 0
-            display_df['Panier'] = display_df['panier_moyen'].apply(
-                lambda x: f"{'🟢' if x > panier_mean * 1.2 else '🟡' if x > panier_mean * 0.8 else '🔴'} {x:.0f}€" if x > 0 else "-"
-            )
-            display_df['Profit€'] = display_df.apply(
-                lambda r: f"{'✅' if r['is_profitable'] else '❌'} {r['profit_estime']:+,.0f}€", axis=1
-            )
+            def format_potential_bar(value):
+                color = '#22c55e' if value >= 70 else '#f0b429' if value >= 50 else '#ef4444'
+                return f'''
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <div style="flex:1; background:{COLORS['bg_tertiary']}; border-radius:4px; height:8px; overflow:hidden;">
+                        <div style="width:{value}%; height:100%; background:{color}; border-radius:4px;"></div>
+                    </div>
+                    <span style="color:{COLORS['text_secondary']}; font-size:0.75rem; min-width:28px;">{value}</span>
+                </div>
+                '''
             
-            # Action formatée
-            action_icons = {'scale': '🚀', 'test': '⚡', 'monitor': '👁️', 'pause': '⏸️'}
-            display_df['Act.'] = display_df['action'].map(action_icons)
+            # Construire le tableau HTML avec lignes alternées
+            roas_seuil = filtered_df['roas_seuil'].iloc[0] if 'roas_seuil' in filtered_df.columns else 2.5
             
-            # Définir les colonnes selon le mode de vue
-            if view_mode == 'complete':
-                columns_to_show = ['format', 'Nom', 'Tend.', 'Score💰', 'Panier', 'Profit€', 'ROAS', 'CTR', 'CPMu', 'Dépense', 'Freq.', 'scale_potential', 'Act.']
-            elif view_mode == 'scores':
-                columns_to_show = ['format', 'Nom', 'Tend.', 'Score💰', 'Trafic', 'Notoriété', 'Global', 'Conf.', 'scale_potential', 'Act.']
-            elif view_mode == 'metrics':
-                columns_to_show = ['format', 'Nom', 'Tend.', 'ROAS', 'Panier', 'Profit€', 'CTR', 'CPMu', 'Dépense', 'Freq.', 'scale_potential', 'Act.']
-            else:  # minimal
-                columns_to_show = ['format', 'Nom', 'Global', 'ROAS', 'Profit€', 'scale_potential', 'Act.']
+            # En-tête du tableau
+            table_html = f"""
+            <style>
+                .custom-table {{ 
+                    width:100%; 
+                    border-collapse:separate; 
+                    border-spacing:0 4px;
+                    font-size:0.85rem;
+                }}
+                .custom-table th {{
+                    text-align:left;
+                    padding:12px 8px;
+                    color:{COLORS['text_muted']};
+                    font-weight:600;
+                    font-size:0.75rem;
+                    text-transform:uppercase;
+                    letter-spacing:0.5px;
+                    border-bottom:1px solid {COLORS['border']};
+                }}
+                .custom-table td {{
+                    padding:10px 8px;
+                    color:{COLORS['text_primary']};
+                    vertical-align:middle;
+                }}
+                .custom-table tr.row-even td {{
+                    background:{COLORS['bg_secondary']};
+                }}
+                .custom-table tr.row-odd td {{
+                    background:{COLORS['bg_tertiary']};
+                }}
+                .custom-table tr.row-even td:first-child {{
+                    border-radius:8px 0 0 8px;
+                }}
+                .custom-table tr.row-even td:last-child {{
+                    border-radius:0 8px 8px 0;
+                }}
+                .custom-table tr.row-odd td:first-child {{
+                    border-radius:8px 0 0 8px;
+                }}
+                .custom-table tr.row-odd td:last-child {{
+                    border-radius:0 8px 8px 0;
+                }}
+                .custom-table tr:hover td {{
+                    background:{COLORS['bg_tertiary']} !important;
+                    cursor:pointer;
+                }}
+                .creative-name {{
+                    max-width:280px;
+                    overflow:hidden;
+                    text-overflow:ellipsis;
+                    white-space:nowrap;
+                }}
+                .creative-name:hover {{
+                    white-space:normal;
+                    word-break:break-all;
+                }}
+            </style>
+            <table class="custom-table">
+                <thead>
+                    <tr>
+                        <th style="width:50px;">Fmt</th>
+                        <th style="width:280px;">Nom créative</th>
+                        <th style="width:60px; text-align:center;">Score</th>
+                        <th style="width:70px; text-align:right;">Trend</th>
+                        <th style="width:60px; text-align:right;">ROAS</th>
+                        <th style="width:80px; text-align:right;">Profit</th>
+                        <th style="width:60px; text-align:right;">CTR</th>
+                        <th style="width:70px; text-align:right;">Dép.</th>
+                        <th style="width:120px;">Potentiel</th>
+                        <th style="width:70px; text-align:center;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+            """
             
-            final_df = display_df[columns_to_show].copy()
+            # Lignes du tableau
+            for idx, (_, row) in enumerate(filtered_df.head(50).iterrows()):
+                row_class = "row-even" if idx % 2 == 0 else "row-odd"
+                
+                # Format badge
+                format_colors = {'IMG': '#3b82f6', 'VID': '#8b5cf6', 'CAR': '#f97316', 'GIF': '#22c55e', 'UGC': '#ec4899', 'STO': '#06b6d4'}
+                fmt_color = format_colors.get(row['format'], COLORS['text_muted'])
+                fmt_badge = f'<span style="background:{fmt_color}20; color:{fmt_color}; padding:2px 6px; border-radius:4px; font-weight:600; font-size:0.75rem;">{row["format"]}</span>'
+                
+                # Nom tronqué
+                nom_display = row['nom'][:45] + '...' if len(row['nom']) > 45 else row['nom']
+                
+                # Score badge
+                score_badge = format_grade_badge(row['score_global'])
+                
+                # Trend
+                trend_val = row['trend_score'] if has_daily else 0
+                trend_badge = format_trend_badge(trend_val)
+                
+                # ROAS
+                roas_badge = format_roas_badge(row['roas'], roas_seuil)
+                
+                # Profit
+                profit_badge = format_profit_badge(row.get('is_profitable', False), row.get('profit_estime', 0))
+                
+                # CTR
+                ctr_val = row['ctr_lien']
+                ctr_color = '#22c55e' if ctr_val > 2 else '#f0b429' if ctr_val > 1 else COLORS['text_secondary']
+                ctr_display = f'<span style="color:{ctr_color};">{ctr_val:.2f}%</span>'
+                
+                # Dépense
+                dep_display = f'{row["depense"]:.0f}€'
+                
+                # Potentiel bar
+                potential_bar = format_potential_bar(row['scale_potential'])
+                
+                # Action badge
+                action_badge = format_action_badge(row['action'])
+                
+                table_html += f"""
+                <tr class="{row_class}">
+                    <td>{fmt_badge}</td>
+                    <td class="creative-name" title="{row['nom']}">{nom_display}</td>
+                    <td style="text-align:center;">{score_badge}</td>
+                    <td style="text-align:right;">{trend_badge}</td>
+                    <td style="text-align:right;">{roas_badge}</td>
+                    <td style="text-align:right;">{profit_badge}</td>
+                    <td style="text-align:right;">{ctr_display}</td>
+                    <td style="text-align:right; color:{COLORS['text_secondary']};">{dep_display}</td>
+                    <td>{potential_bar}</td>
+                    <td style="text-align:center;">{action_badge}</td>
+                </tr>
+                """
             
-            # Renommer les colonnes
-            rename_cols = {'format': 'Fmt', 'scale_potential': 'Pot.'}
-            final_df = final_df.rename(columns=rename_cols)
+            table_html += "</tbody></table>"
             
-            # Configuration dynamique des colonnes
-            column_config = {
-                "Fmt": st.column_config.TextColumn("Fmt", width=55),
-                "Nom": st.column_config.TextColumn("Nom", width=250),
-                "Tend.": st.column_config.TextColumn("Tend.", width=75),
-                "Score💰": st.column_config.TextColumn("Score💰", width=90),
-                "Trafic": st.column_config.TextColumn("Trafic", width=90),
-                "Notoriété": st.column_config.TextColumn("Notoriété", width=90),
-                "Global": st.column_config.TextColumn("Global", width=90),
-                "ROAS": st.column_config.TextColumn("ROAS", width=55),
-                "Panier": st.column_config.TextColumn("Panier", width=75),
-                "Profit€": st.column_config.TextColumn("Profit€", width=90),
-                "CTR": st.column_config.TextColumn("CTR", width=60),
-                "CPMu": st.column_config.TextColumn("CPMu", width=80),
-                "Dépense": st.column_config.TextColumn("Dép.", width=60),
-                "Freq.": st.column_config.TextColumn("Freq.", width=70),
-                "Conf.": st.column_config.TextColumn("Conf.", width=70),
-                "Pot.": st.column_config.ProgressColumn("Pot.", format="%d", min_value=0, max_value=100, width=70),
-                "Act.": st.column_config.TextColumn("", width=35),
-            }
+            # Afficher le tableau custom
+            st.markdown(table_html, unsafe_allow_html=True)
             
-            # Calculer la hauteur dynamique
-            table_height = min(450, max(200, 40 + len(final_df) * 35))
-            
-            # Afficher le tableau
-            st.dataframe(
-                final_df,
-                use_container_width=True,
-                height=table_height,
-                column_config=column_config,
-                hide_index=True
-            )
+            # Message si plus de 50 lignes
+            if len(filtered_df) > 50:
+                st.markdown(f"""
+                <div style="text-align:center; padding:1rem; color:{COLORS['text_muted']}; font-size:0.85rem;">
+                    Affichage des 50 premières créatives sur {len(filtered_df)} · Utilisez les filtres pour affiner
+                </div>
+                """, unsafe_allow_html=True)
         
         # ===== BOUTONS D'ACTION =====
-        col_export, col_scores = st.columns([1, 1])
+        st.markdown("<div style='height:1rem;'></div>", unsafe_allow_html=True)
+        col_export, col_view, col_space = st.columns([1, 1, 2])
+        
         with col_export:
             if filtered_creatives > 0:
                 st.download_button(
@@ -2686,6 +2742,13 @@ def main():
                     mime='text/csv',
                     use_container_width=True
                 )
+        
+        with col_view:
+            view_mode = st.selectbox("Vue",
+                options=['complete', 'scores', 'metrics'],
+                format_func=lambda x: {'complete': '📊 Vue complète', 'scores': '🎯 Vue scores', 'metrics': '📈 Vue métriques'}.get(x, x),
+                label_visibility="collapsed"
+            )
         
         # ===== SCORES DÉTAILLÉS (EXPANDER FERMÉ) =====
         with st.expander("📊 Détail des scores par dimension", expanded=False):
