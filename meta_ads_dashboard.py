@@ -39,144 +39,585 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Initialiser le mode sombre dans session_state
+# Initialiser le mode sombre dans session_state (toujours activé maintenant)
 if 'dark_mode' not in st.session_state:
-    st.session_state.dark_mode = False
+    st.session_state.dark_mode = True
 
-# CSS personnalisé avec mode sombre
-def get_css(dark_mode=False):
-    if dark_mode:
-        return """
-        <style>
-            .stApp {
-                background-color: #1a1a2e;
-                color: #eaeaea;
-            }
-            .main-header {
-                background: linear-gradient(90deg, #4F46E5 0%, #7C3AED 50%, #EC4899 100%);
-                padding: 1.5rem 2rem;
-                border-radius: 12px;
-                color: white;
-                margin-bottom: 2rem;
-            }
-            .action-card {
-                padding: 1rem;
-                border-radius: 8px;
-                margin-bottom: 0.5rem;
-                border-left: 4px solid;
-            }
-            .scale-card { background: #1e3a2f; border-color: #10B981; }
-            .test-card { background: #1e2a3a; border-color: #3B82F6; }
-            .monitor-card { background: #3a3520; border-color: #F59E0B; }
-            .pause-card { background: #3a1e1e; border-color: #EF4444; }
-            .alert-card {
-                padding: 1rem;
-                border-radius: 8px;
-                margin-bottom: 0.5rem;
-                border-left: 4px solid;
-                background: #2a1e1e;
-                border-color: #EF4444;
-            }
-            .warning-card {
-                padding: 1rem;
-                border-radius: 8px;
-                margin-bottom: 0.5rem;
-                border-left: 4px solid;
-                background: #3a3520;
-                border-color: #F59E0B;
-            }
-            .info-card {
-                padding: 1rem;
-                border-radius: 8px;
-                margin-bottom: 0.5rem;
-                border-left: 4px solid;
-                background: #1e2a3a;
-                border-color: #3B82F6;
-            }
-            .trend-badge {
-                display: inline-block;
-                padding: 2px 8px;
-                border-radius: 12px;
-                font-size: 0.75rem;
-                font-weight: 600;
-            }
-            .trend-up { background: #064e3b; color: #6ee7b7; }
-            .trend-down { background: #7f1d1d; color: #fca5a5; }
-            .trend-stable { background: #374151; color: #d1d5db; }
-            .stTabs [data-baseweb="tab-list"] { gap: 8px; }
-            .stTabs [data-baseweb="tab"] { padding: 10px 20px; border-radius: 8px; }
-            .metric-box {
-                background: #2d2d44;
-                padding: 1rem;
-                border-radius: 8px;
-                text-align: center;
-            }
-        </style>
-        """
-    else:
-        return """
-        <style>
-            .main-header {
-                background: linear-gradient(90deg, #4F46E5 0%, #7C3AED 50%, #EC4899 100%);
-                padding: 1.5rem 2rem;
-                border-radius: 12px;
-                color: white;
-                margin-bottom: 2rem;
-            }
-            .action-card {
-                padding: 1rem;
-                border-radius: 8px;
-                margin-bottom: 0.5rem;
-                border-left: 4px solid;
-            }
-            .scale-card { background: #ECFDF5; border-color: #10B981; }
-            .test-card { background: #EFF6FF; border-color: #3B82F6; }
-            .monitor-card { background: #FFFBEB; border-color: #F59E0B; }
-            .pause-card { background: #FEF2F2; border-color: #EF4444; }
-            .alert-card {
-                padding: 1rem;
-                border-radius: 8px;
-                margin-bottom: 0.5rem;
-                border-left: 4px solid;
-                background: #FEF2F2;
-                border-color: #EF4444;
-            }
-            .warning-card {
-                padding: 1rem;
-                border-radius: 8px;
-                margin-bottom: 0.5rem;
-                border-left: 4px solid;
-                background: #FFFBEB;
-                border-color: #F59E0B;
-            }
-            .info-card {
-                padding: 1rem;
-                border-radius: 8px;
-                margin-bottom: 0.5rem;
-                border-left: 4px solid;
-                background: #EFF6FF;
-                border-color: #3B82F6;
-            }
-            .trend-badge {
-                display: inline-block;
-                padding: 2px 8px;
-                border-radius: 12px;
-                font-size: 0.75rem;
-                font-weight: 600;
-            }
-            .trend-up { background: #D1FAE5; color: #065F46; }
-            .trend-down { background: #FEE2E2; color: #991B1B; }
-            .trend-stable { background: #F3F4F6; color: #374151; }
-            .stTabs [data-baseweb="tab-list"] { gap: 8px; }
-            .stTabs [data-baseweb="tab"] { padding: 10px 20px; border-radius: 8px; }
-            .metric-box {
-                background: #F8FAFC;
-                padding: 1rem;
-                border-radius: 8px;
-                text-align: center;
-            }
-        </style>
-        """
+# ============================================================================
+# THÈME VISUEL GA4 STYLE
+# ============================================================================
+
+# Couleurs du thème
+COLORS = {
+    'bg_primary': '#0d1117',      # Fond principal
+    'bg_secondary': '#161b22',    # Fond cards
+    'bg_tertiary': '#21262d',     # Fond hover/accent
+    'border': '#30363d',          # Bordures
+    'text_primary': '#f0f6fc',    # Texte principal
+    'text_secondary': '#8b949e',  # Texte secondaire
+    'text_muted': '#6e7681',      # Texte grisé
+    'accent_gold': '#f0b429',     # Accent doré (graphiques)
+    'accent_orange': '#f97316',   # Orange
+    'accent_red': '#ef4444',      # Rouge
+    'accent_green': '#22c55e',    # Vert
+    'accent_blue': '#3b82f6',     # Bleu
+    'accent_purple': '#8b5cf6',   # Violet
+    'gradient_start': '#4F46E5',  # Gradient header
+    'gradient_end': '#EC4899',    # Gradient header
+}
+
+# CSS personnalisé style GA4
+def get_css(dark_mode=True):
+    return f"""
+    <style>
+        /* ===== GLOBAL DARK THEME ===== */
+        .stApp {{
+            background-color: {COLORS['bg_primary']};
+            color: {COLORS['text_primary']};
+        }}
+        
+        /* Sidebar */
+        [data-testid="stSidebar"] {{
+            background-color: {COLORS['bg_secondary']};
+            border-right: 1px solid {COLORS['border']};
+        }}
+        
+        [data-testid="stSidebar"] .stMarkdown {{
+            color: {COLORS['text_primary']};
+        }}
+        
+        /* ===== HEADER ===== */
+        .main-header {{
+            background: linear-gradient(135deg, {COLORS['gradient_start']} 0%, {COLORS['accent_purple']} 50%, {COLORS['gradient_end']} 100%);
+            padding: 1.5rem 2rem;
+            border-radius: 16px;
+            color: white;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 20px rgba(79, 70, 229, 0.3);
+        }}
+        
+        .main-header h1 {{
+            margin: 0;
+            font-size: 1.8rem;
+            font-weight: 700;
+        }}
+        
+        .main-header p {{
+            margin: 0.5rem 0 0 0;
+            opacity: 0.9;
+            font-size: 0.95rem;
+        }}
+        
+        /* ===== METRIC CARDS GA4 STYLE ===== */
+        .metric-card {{
+            background: {COLORS['bg_secondary']};
+            border: 1px solid {COLORS['border']};
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+            transition: all 0.2s ease;
+        }}
+        
+        .metric-card:hover {{
+            background: {COLORS['bg_tertiary']};
+            border-color: {COLORS['accent_gold']};
+        }}
+        
+        .metric-label {{
+            color: {COLORS['text_secondary']};
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }}
+        
+        .metric-value {{
+            color: {COLORS['text_primary']};
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1.2;
+        }}
+        
+        .metric-value-small {{
+            font-size: 1.5rem;
+        }}
+        
+        /* ===== VARIATION BADGES ===== */
+        .badge {{
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 8px;
+        }}
+        
+        .badge-up {{
+            background: rgba(34, 197, 94, 0.15);
+            color: {COLORS['accent_green']};
+        }}
+        
+        .badge-down {{
+            background: rgba(239, 68, 68, 0.15);
+            color: {COLORS['accent_red']};
+        }}
+        
+        .badge-neutral {{
+            background: rgba(139, 148, 158, 0.15);
+            color: {COLORS['text_secondary']};
+        }}
+        
+        /* ===== ACTION CARDS ===== */
+        .action-card {{
+            background: {COLORS['bg_secondary']};
+            border: 1px solid {COLORS['border']};
+            border-radius: 12px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 0.75rem;
+            border-left: 4px solid;
+            transition: all 0.2s ease;
+        }}
+        
+        .action-card:hover {{
+            transform: translateX(4px);
+        }}
+        
+        .scale-card {{ 
+            border-left-color: {COLORS['accent_green']}; 
+            background: linear-gradient(90deg, rgba(34, 197, 94, 0.1) 0%, {COLORS['bg_secondary']} 100%);
+        }}
+        .test-card {{ 
+            border-left-color: {COLORS['accent_blue']}; 
+            background: linear-gradient(90deg, rgba(59, 130, 246, 0.1) 0%, {COLORS['bg_secondary']} 100%);
+        }}
+        .monitor-card {{ 
+            border-left-color: {COLORS['accent_gold']}; 
+            background: linear-gradient(90deg, rgba(240, 180, 41, 0.1) 0%, {COLORS['bg_secondary']} 100%);
+        }}
+        .pause-card {{ 
+            border-left-color: {COLORS['accent_red']}; 
+            background: linear-gradient(90deg, rgba(239, 68, 68, 0.1) 0%, {COLORS['bg_secondary']} 100%);
+        }}
+        
+        /* ===== ALERT CARDS ===== */
+        .alert-card {{
+            background: linear-gradient(90deg, rgba(239, 68, 68, 0.1) 0%, {COLORS['bg_secondary']} 100%);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-left: 4px solid {COLORS['accent_red']};
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+        }}
+        
+        .warning-card {{
+            background: linear-gradient(90deg, rgba(240, 180, 41, 0.1) 0%, {COLORS['bg_secondary']} 100%);
+            border: 1px solid rgba(240, 180, 41, 0.3);
+            border-left: 4px solid {COLORS['accent_gold']};
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+        }}
+        
+        .info-card {{
+            background: linear-gradient(90deg, rgba(59, 130, 246, 0.1) 0%, {COLORS['bg_secondary']} 100%);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-left: 4px solid {COLORS['accent_blue']};
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+        }}
+        
+        .success-card {{
+            background: linear-gradient(90deg, rgba(34, 197, 94, 0.1) 0%, {COLORS['bg_secondary']} 100%);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-left: 4px solid {COLORS['accent_green']};
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+        }}
+        
+        /* ===== TABS STYLING ===== */
+        .stTabs [data-baseweb="tab-list"] {{
+            gap: 0;
+            background: {COLORS['bg_secondary']};
+            border-radius: 12px;
+            padding: 4px;
+            border: 1px solid {COLORS['border']};
+        }}
+        
+        .stTabs [data-baseweb="tab"] {{
+            padding: 12px 24px;
+            border-radius: 8px;
+            color: {COLORS['text_secondary']};
+            font-weight: 500;
+            background: transparent;
+        }}
+        
+        .stTabs [data-baseweb="tab"]:hover {{
+            color: {COLORS['text_primary']};
+            background: {COLORS['bg_tertiary']};
+        }}
+        
+        .stTabs [aria-selected="true"] {{
+            background: {COLORS['accent_purple']} !important;
+            color: white !important;
+        }}
+        
+        /* ===== DATA TABLES ===== */
+        .stDataFrame {{
+            background: {COLORS['bg_secondary']};
+            border-radius: 12px;
+            overflow: hidden;
+        }}
+        
+        [data-testid="stDataFrame"] > div {{
+            background: {COLORS['bg_secondary']};
+        }}
+        
+        /* ===== EXPANDERS ===== */
+        .streamlit-expanderHeader {{
+            background: {COLORS['bg_secondary']};
+            border: 1px solid {COLORS['border']};
+            border-radius: 12px;
+            color: {COLORS['text_primary']};
+        }}
+        
+        .streamlit-expanderContent {{
+            background: {COLORS['bg_secondary']};
+            border: 1px solid {COLORS['border']};
+            border-top: none;
+            border-radius: 0 0 12px 12px;
+        }}
+        
+        /* ===== BUTTONS ===== */
+        .stButton > button {{
+            background: {COLORS['bg_tertiary']};
+            border: 1px solid {COLORS['border']};
+            color: {COLORS['text_primary']};
+            border-radius: 8px;
+            padding: 0.5rem 1rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }}
+        
+        .stButton > button:hover {{
+            background: {COLORS['accent_purple']};
+            border-color: {COLORS['accent_purple']};
+            color: white;
+        }}
+        
+        /* ===== INPUTS ===== */
+        .stTextInput > div > div > input,
+        .stNumberInput > div > div > input,
+        .stSelectbox > div > div {{
+            background: {COLORS['bg_tertiary']};
+            border: 1px solid {COLORS['border']};
+            color: {COLORS['text_primary']};
+            border-radius: 8px;
+        }}
+        
+        .stMultiSelect > div {{
+            background: {COLORS['bg_tertiary']};
+            border-color: {COLORS['border']};
+        }}
+        
+        /* ===== CHECKBOXES ===== */
+        .stCheckbox label {{
+            color: {COLORS['text_primary']};
+        }}
+        
+        /* ===== DIVIDERS ===== */
+        hr {{
+            border-color: {COLORS['border']};
+            opacity: 0.5;
+        }}
+        
+        /* ===== KPI SUMMARY ROW ===== */
+        .kpi-row {{
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }}
+        
+        .kpi-box {{
+            flex: 1;
+            background: {COLORS['bg_secondary']};
+            border: 1px solid {COLORS['border']};
+            border-radius: 12px;
+            padding: 1.25rem;
+            text-align: center;
+        }}
+        
+        .kpi-box-highlight {{
+            border-color: {COLORS['accent_gold']};
+            box-shadow: 0 0 20px rgba(240, 180, 41, 0.15);
+        }}
+        
+        /* ===== DONUT LEGEND ===== */
+        .legend-item {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+            color: {COLORS['text_secondary']};
+            font-size: 0.85rem;
+        }}
+        
+        .legend-dot {{
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }}
+        
+        /* ===== SCROLLBAR ===== */
+        ::-webkit-scrollbar {{
+            width: 8px;
+            height: 8px;
+        }}
+        
+        ::-webkit-scrollbar-track {{
+            background: {COLORS['bg_primary']};
+        }}
+        
+        ::-webkit-scrollbar-thumb {{
+            background: {COLORS['border']};
+            border-radius: 4px;
+        }}
+        
+        ::-webkit-scrollbar-thumb:hover {{
+            background: {COLORS['text_muted']};
+        }}
+        
+        /* ===== HIDE STREAMLIT BRANDING ===== */
+        #MainMenu {{visibility: hidden;}}
+        footer {{visibility: hidden;}}
+        
+        /* ===== PERIOD LABEL ===== */
+        .period-label {{
+            color: {COLORS['text_muted']};
+            font-size: 0.8rem;
+            margin-bottom: 0.5rem;
+        }}
+        
+        /* ===== CHART CONTAINER ===== */
+        .chart-container {{
+            background: {COLORS['bg_secondary']};
+            border: 1px solid {COLORS['border']};
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+        }}
+        
+        .chart-title {{
+            color: {COLORS['text_primary']};
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }}
+        
+        /* ===== STREAMLIT METRICS OVERRIDE ===== */
+        [data-testid="stMetricValue"] {{
+            color: {COLORS['text_primary']};
+            font-size: 2rem;
+            font-weight: 700;
+        }}
+        
+        [data-testid="stMetricLabel"] {{
+            color: {COLORS['text_secondary']};
+        }}
+        
+        [data-testid="stMetricDelta"] svg {{
+            display: none;
+        }}
+        
+        /* ===== SUCCESS/INFO/WARNING/ERROR STREAMLIT ===== */
+        .stSuccess, .stInfo, .stWarning, .stError {{
+            background: {COLORS['bg_secondary']};
+            border-radius: 12px;
+        }}
+    </style>
+    """
+
+
+# Fonction pour créer le layout Plotly dark theme
+def get_plotly_layout(title="", height=300, showlegend=True):
+    """Retourne un layout Plotly avec le thème sombre."""
+    return dict(
+        title=dict(text=title, font=dict(color=COLORS['text_primary'], size=14)),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color=COLORS['text_secondary'], size=11),
+        height=height,
+        margin=dict(l=40, r=40, t=40 if title else 20, b=40),
+        showlegend=showlegend,
+        legend=dict(
+            bgcolor='rgba(0,0,0,0)',
+            font=dict(color=COLORS['text_secondary'], size=10),
+            orientation='h',
+            yanchor='bottom',
+            y=-0.25,
+            xanchor='center',
+            x=0.5
+        ),
+        xaxis=dict(
+            gridcolor=COLORS['border'],
+            zerolinecolor=COLORS['border'],
+            tickfont=dict(color=COLORS['text_muted'], size=10),
+            showgrid=True,
+            gridwidth=1
+        ),
+        yaxis=dict(
+            gridcolor=COLORS['border'],
+            zerolinecolor=COLORS['border'],
+            tickfont=dict(color=COLORS['text_muted'], size=10),
+            showgrid=True,
+            gridwidth=1
+        ),
+        hoverlabel=dict(
+            bgcolor=COLORS['bg_tertiary'],
+            font_size=12,
+            font_color=COLORS['text_primary']
+        )
+    )
+
+
+def create_area_chart(df, x, y, title="", color=COLORS['accent_gold']):
+    """Crée un graphique en aire avec dégradé style GA4."""
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatter(
+        x=df[x],
+        y=df[y],
+        mode='lines',
+        line=dict(color=color, width=2),
+        fill='tozeroy',
+        fillcolor=f'rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.1)',
+        hovertemplate='%{y:.2f}<extra></extra>'
+    ))
+    
+    fig.update_layout(**get_plotly_layout(title))
+    return fig
+
+
+def create_bar_chart(df, x, y, title="", color=COLORS['accent_orange']):
+    """Crée un graphique en barres style GA4."""
+    fig = go.Figure()
+    
+    fig.add_trace(go.Bar(
+        x=df[x],
+        y=df[y],
+        marker=dict(
+            color=color,
+            line=dict(width=0),
+            cornerradius=4
+        ),
+        hovertemplate='%{y:.2f}<extra></extra>'
+    ))
+    
+    fig.update_layout(**get_plotly_layout(title))
+    return fig
+
+
+def create_donut_chart(values, labels, title="", colors=None):
+    """Crée un graphique donut style GA4."""
+    if colors is None:
+        colors = [COLORS['accent_gold'], COLORS['accent_orange'], COLORS['accent_red'], 
+                  COLORS['accent_blue'], COLORS['accent_green'], COLORS['accent_purple']]
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Pie(
+        values=values,
+        labels=labels,
+        hole=0.65,
+        marker=dict(colors=colors[:len(values)]),
+        textinfo='none',
+        hovertemplate='%{label}: %{value}<br>%{percent}<extra></extra>'
+    ))
+    
+    layout = get_plotly_layout(title, height=250, showlegend=True)
+    layout['legend'] = dict(
+        bgcolor='rgba(0,0,0,0)',
+        font=dict(color=COLORS['text_secondary'], size=10),
+        orientation='h',
+        yanchor='top',
+        y=-0.1,
+        xanchor='center',
+        x=0.5
+    )
+    fig.update_layout(**layout)
+    return fig
+
+
+def create_bubble_chart(df, x, y, size, color, title=""):
+    """Crée un graphique à bulles style GA4."""
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatter(
+        x=df[x],
+        y=df[y],
+        mode='markers',
+        marker=dict(
+            size=df[size],
+            sizemode='area',
+            sizeref=2.*max(df[size])/(40.**2),
+            sizemin=4,
+            color=df[color] if color in df.columns else COLORS['accent_gold'],
+            colorscale='YlOrRd',
+            showscale=True,
+            colorbar=dict(
+                title=dict(text=color, font=dict(color=COLORS['text_secondary'])),
+                tickfont=dict(color=COLORS['text_muted'])
+            )
+        ),
+        hovertemplate=f'{x}: %{{x}}<br>{y}: %{{y}}<br>{size}: %{{marker.size}}<extra></extra>'
+    ))
+    
+    fig.update_layout(**get_plotly_layout(title, height=350))
+    return fig
+
+
+def format_variation_badge(value, inverse=False):
+    """Crée un badge HTML pour afficher une variation."""
+    if value == 0:
+        return f'<span class="badge badge-neutral">0%</span>'
+    
+    is_positive = value > 0
+    if inverse:
+        is_positive = not is_positive
+    
+    badge_class = "badge-up" if is_positive else "badge-down"
+    arrow = "▲" if value > 0 else "▼"
+    
+    return f'<span class="badge {badge_class}">{arrow} {abs(value):.1f}%</span>'
+
+
+def render_metric_card(label, value, variation=None, prefix="", suffix="", inverse=False):
+    """Render une metric card style GA4."""
+    variation_html = ""
+    if variation is not None:
+        variation_html = format_variation_badge(variation, inverse)
+    
+    return f"""
+    <div class="metric-card">
+        <div class="metric-label">{label}</div>
+        <div class="metric-value">{prefix}{value}{suffix} {variation_html}</div>
+    </div>
+    """
+
+
+def render_kpi_card(label, value, subtitle="", highlight=False):
+    """Render un KPI card compact."""
+    highlight_class = "kpi-box-highlight" if highlight else ""
+    return f"""
+    <div class="kpi-box {highlight_class}">
+        <div class="metric-label">{label}</div>
+        <div class="metric-value">{value}</div>
+        <div class="period-label">{subtitle}</div>
+    </div>
+    """
 
 
 # ============================================================================
@@ -1349,36 +1790,36 @@ def main():
             with c1:
                 st.markdown(f"""
                 <div class="action-card scale-card" style="text-align:center;">
-                    <div style="font-size:2rem; font-weight:700;">{scale_count}</div>
-                    <div style="font-weight:600;">🚀 À scaler</div>
-                    <div style="font-size:0.75rem; opacity:0.8;">{pct_budget_scale:.0f}% budget · Pot. {pot_scale:.0f}</div>
+                    <div style="font-size:2rem; font-weight:700; color:{COLORS['text_primary']};">{scale_count}</div>
+                    <div style="font-weight:600; color:{COLORS['text_primary']};">🚀 À scaler</div>
+                    <div style="font-size:0.75rem; color:{COLORS['text_secondary']};">{pct_budget_scale:.0f}% budget · Pot. {pot_scale:.0f}</div>
                 </div>
                 """, unsafe_allow_html=True)
             
             with c2:
                 st.markdown(f"""
                 <div class="action-card test-card" style="text-align:center;">
-                    <div style="font-size:2rem; font-weight:700;">{test_count}</div>
-                    <div style="font-weight:600;">⚡ À tester</div>
-                    <div style="font-size:0.75rem; opacity:0.8;">{pct_budget_test:.0f}% budget · Pot. {pot_test:.0f}</div>
+                    <div style="font-size:2rem; font-weight:700; color:{COLORS['text_primary']};">{test_count}</div>
+                    <div style="font-weight:600; color:{COLORS['text_primary']};">⚡ À tester</div>
+                    <div style="font-size:0.75rem; color:{COLORS['text_secondary']};">{pct_budget_test:.0f}% budget · Pot. {pot_test:.0f}</div>
                 </div>
                 """, unsafe_allow_html=True)
             
             with c3:
                 st.markdown(f"""
                 <div class="action-card monitor-card" style="text-align:center;">
-                    <div style="font-size:2rem; font-weight:700;">{monitor_count}</div>
-                    <div style="font-weight:600;">👁️ Surveiller</div>
-                    <div style="font-size:0.75rem; opacity:0.8;">{pct_budget_monitor:.0f}% budget</div>
+                    <div style="font-size:2rem; font-weight:700; color:{COLORS['text_primary']};">{monitor_count}</div>
+                    <div style="font-weight:600; color:{COLORS['text_primary']};">👁️ Surveiller</div>
+                    <div style="font-size:0.75rem; color:{COLORS['text_secondary']};">{pct_budget_monitor:.0f}% budget</div>
                 </div>
                 """, unsafe_allow_html=True)
             
             with c4:
                 st.markdown(f"""
                 <div class="action-card pause-card" style="text-align:center;">
-                    <div style="font-size:2rem; font-weight:700;">{pause_count}</div>
-                    <div style="font-weight:600;">⏸️ À pauser</div>
-                    <div style="font-size:0.75rem; opacity:0.8;">{pct_budget_pause:.0f}% budget</div>
+                    <div style="font-size:2rem; font-weight:700; color:{COLORS['text_primary']};">{pause_count}</div>
+                    <div style="font-weight:600; color:{COLORS['text_primary']};">⏸️ À pauser</div>
+                    <div style="font-size:0.75rem; color:{COLORS['text_secondary']};">{pct_budget_pause:.0f}% budget</div>
                 </div>
                 """, unsafe_allow_html=True)
         
@@ -1387,8 +1828,8 @@ def main():
             fig_pie = go.Figure(data=[go.Pie(
                 labels=['Scale', 'Test', 'Monitor', 'Pause'],
                 values=[budget_scale, budget_test, budget_monitor, budget_pause],
-                hole=0.6,
-                marker_colors=['#10B981', '#3B82F6', '#F59E0B', '#EF4444'],
+                hole=0.65,
+                marker_colors=[COLORS['accent_green'], COLORS['accent_blue'], COLORS['accent_gold'], COLORS['accent_red']],
                 textinfo='none',
                 hovertemplate='%{label}: %{percent}<extra></extra>'
             )])
@@ -1396,7 +1837,9 @@ def main():
                 showlegend=False,
                 margin=dict(t=10, b=10, l=10, r=10),
                 height=120,
-                annotations=[dict(text='Budget', x=0.5, y=0.5, font_size=11, showarrow=False)]
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                annotations=[dict(text='Budget', x=0.5, y=0.5, font_size=11, font_color=COLORS['text_secondary'], showarrow=False)]
             )
             st.plotly_chart(fig_pie, use_container_width=True)
         
@@ -1412,18 +1855,18 @@ def main():
                 for _, row in scale_df.head(4).iterrows():
                     trend_badge = ""
                     if has_daily and row['trend_signal'] == 'up':
-                        trend_badge = f"<span class='trend-badge trend-up'>+{row['trend_score']:.0f}%</span>"
+                        trend_badge = f"<span class='badge badge-up'>+{row['trend_score']:.0f}%</span>"
                     elif has_daily and row['trend_signal'] == 'down':
-                        trend_badge = f"<span class='trend-badge trend-down'>{row['trend_score']:.0f}%</span>"
+                        trend_badge = f"<span class='badge badge-down'>{row['trend_score']:.0f}%</span>"
                     
                     st.markdown(f"""
                     <div class="action-card scale-card" style="padding:0.6rem 0.8rem; margin-bottom:0.4rem;">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <div>
-                                <strong>{row['format']}</strong> · {row['nom'][:35]}{'...' if len(row['nom']) > 35 else ''} {trend_badge}
-                                <div style="font-size:0.75rem; opacity:0.8;">ROAS {row['roas']:.1f} · CTR {row['ctr_lien']:.2f}% · Pot. {row['scale_potential']}</div>
+                                <strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{row['nom'][:35]}{'...' if len(row['nom']) > 35 else ''}</span> {trend_badge}
+                                <div style="font-size:0.75rem; color:{COLORS['text_secondary']};">ROAS {row['roas']:.1f} · CTR {row['ctr_lien']:.2f}% · Pot. {row['scale_potential']}</div>
                             </div>
-                            <div style="font-size:0.7rem; background:#10B981; color:white; padding:2px 8px; border-radius:4px;">+20%</div>
+                            <div style="font-size:0.7rem; background:{COLORS['accent_green']}; color:white; padding:2px 8px; border-radius:4px;">+20%</div>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
@@ -1444,7 +1887,7 @@ def main():
                     
                     st.markdown(f"""
                     <div class="action-card monitor-card" style="padding:0.5rem 0.8rem; margin-bottom:0.3rem;">
-                        <strong>{row['format']}</strong> · {row['nom'][:30]}... <span style="opacity:0.6;">{trend_icon}</span>
+                        <strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{row['nom'][:30]}...</span> <span style="color:{COLORS['text_muted']};">{trend_icon}</span>
                     </div>
                     """, unsafe_allow_html=True)
         
@@ -1459,10 +1902,10 @@ def main():
                     <div class="action-card test-card" style="padding:0.6rem 0.8rem; margin-bottom:0.4rem;">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <div>
-                                <strong>{row['format']}</strong> · {row['nom'][:35]}{'...' if len(row['nom']) > 35 else ''}
-                                <div style="font-size:0.75rem; opacity:0.8;">ROAS {row['roas']:.1f} · Confiance {row['coefficient_confiance']*100:.0f}%</div>
+                                <strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{row['nom'][:35]}{'...' if len(row['nom']) > 35 else ''}</span>
+                                <div style="font-size:0.75rem; color:{COLORS['text_secondary']};">ROAS {row['roas']:.1f} · Confiance {row['coefficient_confiance']*100:.0f}%</div>
                             </div>
-                            <div style="font-size:0.7rem; background:#3B82F6; color:white; padding:2px 8px; border-radius:4px;">+50%</div>
+                            <div style="font-size:0.7rem; background:{COLORS['accent_blue']}; color:white; padding:2px 8px; border-radius:4px;">+50%</div>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
@@ -1479,12 +1922,12 @@ def main():
                 for _, row in pause_df.head(3).iterrows():
                     trend_badge = ""
                     if has_daily and row['trend_score'] < -20:
-                        trend_badge = f"<span class='trend-badge trend-down'>{row['trend_score']:.0f}%</span>"
+                        trend_badge = f"<span class='badge badge-down'>{row['trend_score']:.0f}%</span>"
                     
                     st.markdown(f"""
                     <div class="action-card pause-card" style="padding:0.5rem 0.8rem; margin-bottom:0.3rem;">
-                        <strong>{row['format']}</strong> · {row['nom'][:30]}... {trend_badge}
-                        <div style="font-size:0.7rem; opacity:0.8;">Freq. {row['frequency']:.2f}</div>
+                        <strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{row['nom'][:30]}...</span> {trend_badge}
+                        <div style="font-size:0.7rem; color:{COLORS['text_secondary']};">Freq. {row['frequency']:.2f}</div>
                     </div>
                     """, unsafe_allow_html=True)
                 if len(pause_df) > 3:
@@ -2324,8 +2767,16 @@ def main():
                             values = [d.get(metric_key, 0) for d in sparkline_data]
                             
                             fig = go.Figure()
-                            fig.add_trace(go.Scatter(x=dates, y=values, mode='lines+markers', line=dict(color='#6366F1', width=2), marker=dict(size=5)))
-                            fig.update_layout(height=200, margin=dict(t=10, b=30, l=40, r=10), xaxis=dict(tickangle=45), showlegend=False)
+                            fig.add_trace(go.Scatter(
+                                x=dates, y=values, mode='lines+markers', 
+                                line=dict(color=COLORS['accent_gold'], width=2), 
+                                marker=dict(size=6, color=COLORS['accent_gold']),
+                                fill='tozeroy',
+                                fillcolor=f'rgba(240, 180, 41, 0.1)'
+                            ))
+                            layout = get_plotly_layout("", height=200)
+                            layout['xaxis']['tickangle'] = 45
+                            fig.update_layout(**layout)
                             st.plotly_chart(fig, use_container_width=True)
                     
                     st.info(f"**Recommandation:** {row['recommendation']}")
@@ -2348,14 +2799,20 @@ def main():
             if has_daily:
                 st.subheader("📈 Évolution CTR")
                 fig = go.Figure()
-                for nom in selected:
+                colors_list = [COLORS['accent_gold'], COLORS['accent_orange'], COLORS['accent_blue'], COLORS['accent_green']]
+                for i, nom in enumerate(selected):
                     if nom in sparklines:
                         values = [d.get('ctr', 0) for d in sparklines[nom]]
                         fig.add_trace(go.Scatter(
                             x=list(range(len(values))), y=values,
-                            mode='lines+markers', name=nom[:25] + '...', line=dict(width=2)
+                            mode='lines+markers', name=nom[:25] + '...', 
+                            line=dict(width=2, color=colors_list[i % len(colors_list)]),
+                            marker=dict(size=6)
                         ))
-                fig.update_layout(height=250, xaxis_title="Jour", yaxis_title="CTR %")
+                layout = get_plotly_layout("", height=250)
+                layout['xaxis']['title'] = dict(text="Jour", font=dict(color=COLORS['text_secondary']))
+                layout['yaxis']['title'] = dict(text="CTR %", font=dict(color=COLORS['text_secondary']))
+                fig.update_layout(**layout)
                 st.plotly_chart(fig, use_container_width=True)
             
             st.subheader("📊 Comparaison scores")
@@ -2376,14 +2833,27 @@ def main():
             
             st.subheader("🎯 Radar")
             fig = go.Figure()
-            for nom in selected:
+            colors_list = [COLORS['accent_gold'], COLORS['accent_orange'], COLORS['accent_blue'], COLORS['accent_green']]
+            for i, nom in enumerate(selected):
                 row = compare_df[compare_df['nom'] == nom].iloc[0]
                 values = [row['score_profitabilite'], row['score_trafic'], row['score_notoriete'], row['scale_potential'], row['score_profitabilite']]
                 fig.add_trace(go.Scatterpolar(
                     r=values, theta=['Profit', 'Trafic', 'Notoriété', 'Potentiel', 'Profit'],
-                    name=nom[:25] + '...', fill='toself', opacity=0.6
+                    name=nom[:25] + '...', fill='toself', opacity=0.5,
+                    line=dict(color=colors_list[i % len(colors_list)])
                 ))
-            fig.update_layout(polar=dict(radialaxis=dict(range=[0, 100])), height=400)
+            fig.update_layout(
+                polar=dict(
+                    radialaxis=dict(range=[0, 100], gridcolor=COLORS['border'], tickfont=dict(color=COLORS['text_muted'])),
+                    angularaxis=dict(gridcolor=COLORS['border'], tickfont=dict(color=COLORS['text_secondary'])),
+                    bgcolor='rgba(0,0,0,0)'
+                ),
+                height=400,
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(color=COLORS['text_secondary']),
+                legend=dict(font=dict(color=COLORS['text_secondary']))
+            )
             st.plotly_chart(fig, use_container_width=True)
             
             winner = compare_df.sort_values('scale_potential', ascending=False).iloc[0]
