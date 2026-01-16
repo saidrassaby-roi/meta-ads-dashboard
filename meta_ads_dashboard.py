@@ -2996,21 +2996,21 @@ def main():
             
             # Configuration des colonnes - NOM très large, autres colonnes compactes
             column_config = {
-                "Type": st.column_config.TextColumn("Fmt", width=45),
-                "Nom": st.column_config.TextColumn("Nom de la créative", width=400 if has_thumbnails else 450),  # Largeur ajustée
-                "Score": st.column_config.TextColumn("📊", width=75, help="Score global"),
-                "Trend": st.column_config.TextColumn("📈", width=65, help="Tendance"),
-                "ROAS": st.column_config.TextColumn("💰", width=55, help="ROAS"),
-                "Profit": st.column_config.TextColumn("💵", width=75, help="Profit estimé"),
-                "CTR": st.column_config.TextColumn("👆", width=55, help="CTR"),
-                "Dép.": st.column_config.TextColumn("€", width=50, help="Dépense"),
-                "Pot.": st.column_config.ProgressColumn("🎯", format="%d", min_value=0, max_value=100, width=70, help="Potentiel"),
-                "Action": st.column_config.TextColumn("⚡", width=80, help="Action recommandée"),
+                "Type": st.column_config.TextColumn("Fmt", width=50),
+                "Nom": st.column_config.TextColumn("Nom de la créative", width=380 if has_thumbnails else 430),
+                "Score": st.column_config.TextColumn("Score", width=70, help="Score global"),
+                "Trend": st.column_config.TextColumn("Trend", width=65, help="Tendance 7 jours"),
+                "ROAS": st.column_config.TextColumn("ROAS", width=60, help="Return On Ad Spend"),
+                "Profit": st.column_config.TextColumn("Profit", width=80, help="Profit estimé"),
+                "CTR": st.column_config.TextColumn("CTR", width=60, help="Click-Through Rate"),
+                "Dép.": st.column_config.TextColumn("Dép.", width=55, help="Dépense totale"),
+                "Pot.": st.column_config.ProgressColumn("Potentiel", format="%d", min_value=0, max_value=100, width=80, help="Potentiel de scale"),
+                "Action": st.column_config.TextColumn("Action", width=85, help="Action recommandée"),
             }
             
             # Ajouter la config pour thumbnail si disponible
             if has_thumbnails and 'Thumb' in final_df.columns:
-                column_config["Thumb"] = st.column_config.ImageColumn("🖼️", width=55, help="Miniature")
+                column_config["Thumb"] = st.column_config.ImageColumn("Thumb", width=55, help="Miniature de la créative")
             
             # Hauteur dynamique
             table_height = min(550, max(300, 50 + len(final_df) * 40))
