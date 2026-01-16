@@ -801,16 +801,23 @@ def find_column(df, possible_names):
         if name in df.columns:
             return name
     
-    # Ensuite essayer avec normalisation
+    # Ensuite essayer avec normalisation (case insensitive)
     for name in possible_names:
         norm_name = normalize_text(name)
         for col in df.columns:
             norm_col = normalize_text(col)
+            # Correspondance exacte normalisée
             if norm_col == norm_name:
                 return col
-            # Correspondance partielle
+    
+    # Correspondance partielle
+    for name in possible_names:
+        norm_name = normalize_text(name)
+        for col in df.columns:
+            norm_col = normalize_text(col)
             if norm_name in norm_col or norm_col in norm_name:
                 return col
+    
     return None
 
 
@@ -839,13 +846,13 @@ def standardize_columns(df):
     """Standardise les noms de colonnes du CSV Meta Ads."""
     
     column_mappings = {
-        'nom': ['Nom de la publicité', 'Ad name', 'nom_publicite', 'nom', 'Nom de la pub'],
+        'nom': ['Nom de la publicité', 'Ad name', 'nom_publicite', 'nom', 'Nom de la pub', 'Nom publicité', 'nom de la publicite'],
         'campagne': ['Nom de la campagne', 'Campaign name', 'campagne', 'nom_campagne'],
-        'audience': ['Nom de l\'ensemble de publicités', 'Ad set name', 'audience', 'nom_adset', 'adset'],
-        'impressions': ['Impressions', 'impressions'],
-        'reach': ['Couverture', 'Reach', 'reach', 'couverture'],
-        'clics_lien': ['Clics sur un lien', 'Link clicks', 'clics_lien', 'Clics sur le lien'],
-        'clics_tous': ['Clics (tous)', 'Clicks (all)', 'clics_tous'],
+        'audience': ['Nom de l\'ensemble de publicités', 'Ad set name', 'audience', 'nom_adset', 'adset', 'Nom de l\'ensemble de publicites'],
+        'impressions': ['Impressions', 'impressions', 'Impression', 'impression', 'impr'],
+        'reach': ['Couverture', 'Reach', 'reach', 'couverture', 'Portée', 'portee'],
+        'clics_lien': ['Clics sur un lien', 'Link clicks', 'clics_lien', 'Clics sur le lien', 'Clics (lien)', 'clics sur lien'],
+        'clics_tous': ['Clics (tous)', 'Clicks (all)', 'clics_tous', 'Clics'],
         'ctr_lien': ['CTR unique (taux de clics sur le lien)', 'CTR (taux de clics sur le lien)', 
                      'Link click-through rate', 'ctr_lien', 'CTR (lien)', 'ctr_unique_lien'],
         'ctr_tous': ['CTR (tous)', 'CTR (all)', 'ctr_tous'],
@@ -914,6 +921,18 @@ def load_and_process_data(uploaded_file):
     
     df = pd.read_csv(uploaded_file)
     df = standardize_columns(df)
+    
+    # Vérifier les colonnes essentielles
+    required_cols = ['impressions', 'nom']
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    
+    if missing_cols:
+        available_cols = ", ".join(df.columns.tolist()[:20]) + ("..." if len(df.columns) > 20 else "")
+        raise ValueError(f"Colonnes manquantes: {missing_cols}. Colonnes disponibles: {available_cols}")
+    
+    # Ajouter reach par défaut si absent (= impressions)
+    if 'reach' not in df.columns:
+        df['reach'] = df['impressions']
     
     numeric_cols = ['impressions', 'reach', 'clics_lien', 'clics_tous', 'ctr_lien', 'ctr_tous',
                     'cpc_lien', 'cpc_tous', 'cpm', 'depense', 'achats', 'valeur_achats', 'roas', 
@@ -1873,20 +1892,30 @@ def main():
             with col_btn1:
                 if st.button("🔌 Connecter", use_container_width=True):
                     if access_token and ad_account_id:
-                        # Formater l'ad account id si nécessaire
-                        if not ad_account_id.startswith('act_'):
-                            ad_account_id = f"act_{ad_account_id}"
+                        # Nettoyer l'ad account id
+                        # Retirer les préfixes courants et caractères invalides
+                        clean_id = ad_account_id.strip()
+                        clean_id = clean_id.replace('act_', '').replace('act=', '').replace('act', '')
+                        # Ne garder que les chiffres
+                        clean_id = ''.join(c for c in clean_id if c.isdigit())
                         
-                        success, message = test_api_connection(access_token, ad_account_id)
-                        
-                        if success:
-                            st.session_state.meta_access_token = access_token
-                            st.session_state.meta_ad_account_id = ad_account_id
-                            st.session_state.api_connected = True
-                            st.success(message)
+                        if clean_id:
+                            ad_account_id = f"act_{clean_id}"
                         else:
-                            st.session_state.api_connected = False
-                            st.error(message)
+                            st.error("❌ Ad Account ID invalide. Entrez uniquement les chiffres.")
+                            ad_account_id = None
+                        
+                        if ad_account_id:
+                            success, message = test_api_connection(access_token, ad_account_id)
+                        
+                            if success:
+                                st.session_state.meta_access_token = access_token
+                                st.session_state.meta_ad_account_id = ad_account_id
+                                st.session_state.api_connected = True
+                                st.success(message)
+                            else:
+                                st.session_state.api_connected = False
+                                st.error(message)
                     else:
                         st.warning("⚠️ Remplissez les deux champs")
             
@@ -1948,7 +1977,21 @@ def main():
             return
             
     except Exception as e:
-        st.error(f"❌ Erreur: {str(e)}")
+        error_msg = str(e)
+        st.error(f"❌ Erreur: {error_msg}")
+        
+        # Afficher les colonnes disponibles pour aider au debug
+        if "'impressions'" in error_msg or "'reach'" in error_msg or "'nom'" in error_msg:
+            try:
+                # Recharger le CSV pour afficher les colonnes
+                uploaded_main.seek(0)
+                df_debug = pd.read_csv(uploaded_main)
+                with st.expander("🔍 Debug: Colonnes disponibles dans le CSV", expanded=True):
+                    st.write("**Colonnes trouvées:**")
+                    st.code(", ".join(df_debug.columns.tolist()))
+                    st.write("**Colonnes requises:** impressions, reach, nom, depense")
+            except:
+                pass
         return
     
     if has_daily:
