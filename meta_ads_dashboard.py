@@ -1,11 +1,17 @@
 """
-Meta Ads Creative Intelligence Dashboard V2.5
+Meta Ads Creative Intelligence Dashboard V2.6
 =============================================
 Application de pilotage des créatives publicitaires Meta Ads.
 Tableau avec composants natifs Streamlit pour un affichage fiable.
 
 Auteur: Le ROI Digital
-Version: 2.5 - Nomenclature personnalisée
+Version: 2.6 - Intégration API Meta pour thumbnails
+
+Changelog V2.6:
+- Intégration API Meta Ads pour récupérer les thumbnails des créatives
+- Affichage des miniatures dans les cards et tableaux
+- Cache des thumbnails pour optimiser les performances
+- Configuration API dans la sidebar (Token + Ad Account ID)
 
 Changelog V2.5:
 - Score Profitabilité V2 avec Panier moyen (20%)
@@ -30,6 +36,7 @@ from datetime import datetime, timedelta
 import plotly.express as px
 import plotly.graph_objects as go
 import re
+import requests
 
 # Configuration de la page
 st.set_page_config(
@@ -42,6 +49,10 @@ st.set_page_config(
 # Initialiser le mode sombre dans session_state (toujours activé maintenant)
 if 'dark_mode' not in st.session_state:
     st.session_state.dark_mode = True
+
+# Initialiser le cache des thumbnails
+if 'thumbnail_cache' not in st.session_state:
+    st.session_state.thumbnail_cache = {}
 
 # ============================================================================
 # THÈME VISUEL GA4 STYLE
@@ -621,6 +632,144 @@ def render_kpi_card(label, value, subtitle="", highlight=False):
 
 
 # ============================================================================
+# API META ADS - FONCTIONS THUMBNAILS
+# ============================================================================
+
+def test_api_connection(access_token, ad_account_id):
+    """
+    Teste la connexion à l'API Meta Ads.
+    
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    try:
+        url = f"https://graph.facebook.com/v19.0/{ad_account_id}"
+        params = {
+            'access_token': access_token,
+            'fields': 'name,account_id'
+        }
+        response = requests.get(url, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            account_name = data.get('name', 'Compte')
+            return True, f"✅ Connecté à : {account_name}"
+        else:
+            error = response.json().get('error', {}).get('message', 'Erreur inconnue')
+            return False, f"❌ Erreur : {error}"
+    except requests.exceptions.Timeout:
+        return False, "❌ Timeout - Vérifiez votre connexion"
+    except Exception as e:
+        return False, f"❌ Erreur : {str(e)}"
+
+
+def fetch_thumbnails_batch(access_token, ad_account_id, ad_ids, batch_size=50):
+    """
+    Récupère les thumbnails pour une liste d'Ad IDs en batch.
+    
+    Args:
+        access_token: Token d'accès Meta API
+        ad_account_id: ID du compte publicitaire (format act_XXXXX)
+        ad_ids: Liste des Ad IDs à récupérer
+        batch_size: Nombre d'ads par requête (max 50 recommandé)
+    
+    Returns:
+        dict: {ad_id: thumbnail_url}
+    """
+    thumbnails = {}
+    
+    # Filtrer les IDs déjà en cache
+    ids_to_fetch = [aid for aid in ad_ids if aid and str(aid) not in st.session_state.thumbnail_cache]
+    
+    if not ids_to_fetch:
+        return thumbnails
+    
+    # Traiter par batch
+    for i in range(0, len(ids_to_fetch), batch_size):
+        batch_ids = ids_to_fetch[i:i + batch_size]
+        
+        try:
+            # Requête pour récupérer les thumbnails
+            url = f"https://graph.facebook.com/v19.0/"
+            params = {
+                'access_token': access_token,
+                'ids': ','.join(str(aid) for aid in batch_ids),
+                'fields': 'id,name,creative{thumbnail_url,image_url}'
+            }
+            
+            response = requests.get(url, params=params, timeout=30)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                for ad_id, ad_data in data.items():
+                    creative = ad_data.get('creative', {})
+                    # Priorité : thumbnail_url > image_url
+                    thumb_url = creative.get('thumbnail_url') or creative.get('image_url')
+                    
+                    if thumb_url:
+                        thumbnails[str(ad_id)] = thumb_url
+                        st.session_state.thumbnail_cache[str(ad_id)] = thumb_url
+                    else:
+                        # Marquer comme non disponible pour éviter de re-requêter
+                        st.session_state.thumbnail_cache[str(ad_id)] = None
+                        
+        except Exception as e:
+            st.warning(f"⚠️ Erreur batch thumbnails : {str(e)}")
+            continue
+    
+    return thumbnails
+
+
+def get_thumbnail_url(ad_id):
+    """
+    Récupère l'URL du thumbnail depuis le cache.
+    
+    Args:
+        ad_id: ID de la publicité
+    
+    Returns:
+        str or None: URL du thumbnail ou None si non disponible
+    """
+    if not ad_id:
+        return None
+    return st.session_state.thumbnail_cache.get(str(ad_id))
+
+
+def render_thumbnail_html(thumbnail_url, size=40, fallback_icon="🖼️"):
+    """
+    Génère le HTML pour afficher un thumbnail.
+    
+    Args:
+        thumbnail_url: URL de l'image ou None
+        size: Taille en pixels
+        fallback_icon: Emoji à afficher si pas d'image
+    
+    Returns:
+        str: HTML de l'image ou du fallback
+    """
+    if thumbnail_url:
+        return f'''
+        <img src="{thumbnail_url}" 
+             style="width:{size}px; height:{size}px; object-fit:cover; border-radius:6px; border:1px solid {COLORS['border']};"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+        />
+        <div style="display:none; width:{size}px; height:{size}px; background:{COLORS['bg_tertiary']}; 
+                    border-radius:6px; align-items:center; justify-content:center; font-size:{size//2}px;">
+            {fallback_icon}
+        </div>
+        '''
+    else:
+        return f'''
+        <div style="width:{size}px; height:{size}px; background:{COLORS['bg_tertiary']}; 
+                    border-radius:6px; display:flex; align-items:center; justify-content:center; 
+                    font-size:{size//2}px; border:1px solid {COLORS['border']};">
+            {fallback_icon}
+        </div>
+        '''
+
+
+# ============================================================================
 # FONCTIONS DE TRAITEMENT
 # ============================================================================
 
@@ -668,6 +817,7 @@ def standardize_columns(df):
         'ajouts_panier': ['Ajouts au panier', 'Adds to cart', 'ajouts_panier'],
         'date_debut': ['Début des rapports', 'Reporting starts', 'date_debut'],
         'date_fin': ['Fin des rapports', 'Reporting ends', 'date_fin'],
+        'ad_id': ['ID de la publicité', 'Ad ID', 'ad_id', 'ID publicité', 'id_publicite'],
     }
     
     rename_dict = {}
@@ -1634,6 +1784,72 @@ def main():
         st.info(f"📊 **ROAS seuil**: {roas_seuil}  \nMinimum pour être rentable avec {marge_moyenne}% de marge")
         
         st.divider()
+        
+        # ===== SECTION API META POUR THUMBNAILS =====
+        st.subheader("🖼️ Thumbnails (API Meta)")
+        
+        with st.expander("Configuration API", expanded=False):
+            st.caption("Connectez l'API Meta pour afficher les miniatures des créatives.")
+            
+            # Initialiser les valeurs dans session_state si pas présentes
+            if 'meta_access_token' not in st.session_state:
+                st.session_state.meta_access_token = ""
+            if 'meta_ad_account_id' not in st.session_state:
+                st.session_state.meta_ad_account_id = ""
+            if 'api_connected' not in st.session_state:
+                st.session_state.api_connected = False
+            
+            access_token = st.text_input(
+                "Access Token",
+                value=st.session_state.meta_access_token,
+                type="password",
+                help="Token généré depuis Graph API Explorer avec permission ads_management"
+            )
+            
+            ad_account_id = st.text_input(
+                "Ad Account ID",
+                value=st.session_state.meta_ad_account_id,
+                placeholder="act_123456789",
+                help="Format: act_XXXXXXXXX"
+            )
+            
+            col_btn1, col_btn2 = st.columns(2)
+            
+            with col_btn1:
+                if st.button("🔌 Connecter", use_container_width=True):
+                    if access_token and ad_account_id:
+                        # Formater l'ad account id si nécessaire
+                        if not ad_account_id.startswith('act_'):
+                            ad_account_id = f"act_{ad_account_id}"
+                        
+                        success, message = test_api_connection(access_token, ad_account_id)
+                        
+                        if success:
+                            st.session_state.meta_access_token = access_token
+                            st.session_state.meta_ad_account_id = ad_account_id
+                            st.session_state.api_connected = True
+                            st.success(message)
+                        else:
+                            st.session_state.api_connected = False
+                            st.error(message)
+                    else:
+                        st.warning("⚠️ Remplissez les deux champs")
+            
+            with col_btn2:
+                if st.button("🗑️ Déconnecter", use_container_width=True):
+                    st.session_state.meta_access_token = ""
+                    st.session_state.meta_ad_account_id = ""
+                    st.session_state.api_connected = False
+                    st.session_state.thumbnail_cache = {}
+                    st.info("Déconnecté")
+            
+            # Status de connexion
+            if st.session_state.api_connected:
+                st.success(f"✅ API connectée · {len(st.session_state.thumbnail_cache)} thumbnails en cache")
+            else:
+                st.caption("❌ Non connecté")
+        
+        st.divider()
         st.markdown("""
         **Légende:** 🚀 Scaler · ⚡ Tester · 👁️ Surveiller · ⏸️ Pauser
         """)
@@ -1686,6 +1902,32 @@ def main():
     # Message informatif si filtre dépense actif
     if min_depense > 0:
         st.info(f"🎚️ **Filtre actif** : Dépense ≥ {min_depense}€ · **{len(df)}** créatives · Scores recalculés sur ce périmètre")
+    
+    # ===== RÉCUPÉRATION DES THUMBNAILS VIA API META =====
+    has_thumbnails = False
+    if st.session_state.api_connected and 'ad_id' in df.columns:
+        ad_ids = df['ad_id'].dropna().unique().tolist()
+        if ad_ids:
+            # Vérifier combien d'IDs ne sont pas en cache
+            ids_not_cached = [aid for aid in ad_ids if str(aid) not in st.session_state.thumbnail_cache]
+            
+            if ids_not_cached:
+                with st.spinner(f"🖼️ Récupération de {len(ids_not_cached)} thumbnails..."):
+                    fetch_thumbnails_batch(
+                        st.session_state.meta_access_token,
+                        st.session_state.meta_ad_account_id,
+                        ids_not_cached
+                    )
+            
+            # Ajouter les URLs de thumbnail au DataFrame
+            df['thumbnail_url'] = df['ad_id'].apply(lambda x: get_thumbnail_url(x) if pd.notna(x) else None)
+            has_thumbnails = df['thumbnail_url'].notna().any()
+            
+            if has_thumbnails:
+                nb_thumbs = df['thumbnail_url'].notna().sum()
+                st.success(f"🖼️ {nb_thumbs}/{len(df)} thumbnails chargés")
+    elif st.session_state.api_connected and 'ad_id' not in df.columns:
+        st.warning("⚠️ Colonne 'ID de la publicité' non trouvée dans le CSV. Ajoutez-la pour afficher les thumbnails.")
     
     # Tabs
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -1875,12 +2117,22 @@ def main():
                     elif has_daily and row['trend_signal'] == 'down':
                         trend_badge = f"<span class='badge badge-down'>{row['trend_score']:.0f}%</span>"
                     
+                    # Thumbnail
+                    thumb_html = ""
+                    if has_thumbnails and pd.notna(row.get('thumbnail_url')):
+                        thumb_html = f'''<img src="{row['thumbnail_url']}" style="width:44px; height:44px; object-fit:cover; border-radius:6px; margin-right:10px; border:1px solid {COLORS['border']};" onerror="this.style.display='none'"/>'''
+                    elif has_thumbnails:
+                        thumb_html = f'''<div style="width:44px; height:44px; background:{COLORS['bg_tertiary']}; border-radius:6px; margin-right:10px; display:flex; align-items:center; justify-content:center; font-size:18px; border:1px solid {COLORS['border']};">🖼️</div>'''
+                    
                     st.markdown(f"""
                     <div class="action-card scale-card" style="padding:0.6rem 0.8rem; margin-bottom:0.4rem;">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <div>
-                                <strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{row['nom'][:35]}{'...' if len(row['nom']) > 35 else ''}</span> {trend_badge}
-                                <div style="font-size:0.75rem; color:{COLORS['text_secondary']};">ROAS {row['roas']:.1f} · CTR {row['ctr_lien']:.2f}% · Pot. {row['scale_potential']}</div>
+                            <div style="display:flex; align-items:center;">
+                                {thumb_html}
+                                <div>
+                                    <strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{row['nom'][:35]}{'...' if len(row['nom']) > 35 else ''}</span> {trend_badge}
+                                    <div style="font-size:0.75rem; color:{COLORS['text_secondary']};">ROAS {row['roas']:.1f} · CTR {row['ctr_lien']:.2f}% · Pot. {row['scale_potential']}</div>
+                                </div>
                             </div>
                             <div style="font-size:0.7rem; background:{COLORS['accent_green']}; color:white; padding:2px 8px; border-radius:4px;">+20%</div>
                         </div>
@@ -1901,9 +2153,17 @@ def main():
                     if has_daily:
                         trend_icon = "↗" if row['trend_signal'] == 'up' else "↘" if row['trend_signal'] == 'down' else "→"
                     
+                    # Thumbnail
+                    thumb_html = ""
+                    if has_thumbnails and pd.notna(row.get('thumbnail_url')):
+                        thumb_html = f'''<img src="{row['thumbnail_url']}" style="width:32px; height:32px; object-fit:cover; border-radius:4px; margin-right:8px; border:1px solid {COLORS['border']};" onerror="this.style.display='none'"/>'''
+                    
                     st.markdown(f"""
                     <div class="action-card monitor-card" style="padding:0.5rem 0.8rem; margin-bottom:0.3rem;">
-                        <strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{row['nom'][:30]}...</span> <span style="color:{COLORS['text_muted']};">{trend_icon}</span>
+                        <div style="display:flex; align-items:center;">
+                            {thumb_html}
+                            <span><strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{row['nom'][:30]}...</span> <span style="color:{COLORS['text_muted']};">{trend_icon}</span></span>
+                        </div>
                     </div>
                     """, unsafe_allow_html=True)
         
@@ -1914,12 +2174,22 @@ def main():
             
             if len(test_df) > 0:
                 for _, row in test_df.head(4).iterrows():
+                    # Thumbnail
+                    thumb_html = ""
+                    if has_thumbnails and pd.notna(row.get('thumbnail_url')):
+                        thumb_html = f'''<img src="{row['thumbnail_url']}" style="width:44px; height:44px; object-fit:cover; border-radius:6px; margin-right:10px; border:1px solid {COLORS['border']};" onerror="this.style.display='none'"/>'''
+                    elif has_thumbnails:
+                        thumb_html = f'''<div style="width:44px; height:44px; background:{COLORS['bg_tertiary']}; border-radius:6px; margin-right:10px; display:flex; align-items:center; justify-content:center; font-size:18px; border:1px solid {COLORS['border']};">🖼️</div>'''
+                    
                     st.markdown(f"""
                     <div class="action-card test-card" style="padding:0.6rem 0.8rem; margin-bottom:0.4rem;">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <div>
-                                <strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{row['nom'][:35]}{'...' if len(row['nom']) > 35 else ''}</span>
-                                <div style="font-size:0.75rem; color:{COLORS['text_secondary']};">ROAS {row['roas']:.1f} · Confiance {row['coefficient_confiance']*100:.0f}%</div>
+                            <div style="display:flex; align-items:center;">
+                                {thumb_html}
+                                <div>
+                                    <strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{row['nom'][:35]}{'...' if len(row['nom']) > 35 else ''}</span>
+                                    <div style="font-size:0.75rem; color:{COLORS['text_secondary']};">ROAS {row['roas']:.1f} · Confiance {row['coefficient_confiance']*100:.0f}%</div>
+                                </div>
                             </div>
                             <div style="font-size:0.7rem; background:{COLORS['accent_blue']}; color:white; padding:2px 8px; border-radius:4px;">+50%</div>
                         </div>
@@ -1940,10 +2210,20 @@ def main():
                     if has_daily and row['trend_score'] < -20:
                         trend_badge = f"<span class='badge badge-down'>{row['trend_score']:.0f}%</span>"
                     
+                    # Thumbnail
+                    thumb_html = ""
+                    if has_thumbnails and pd.notna(row.get('thumbnail_url')):
+                        thumb_html = f'''<img src="{row['thumbnail_url']}" style="width:36px; height:36px; object-fit:cover; border-radius:6px; margin-right:8px; border:1px solid {COLORS['border']};" onerror="this.style.display='none'"/>'''
+                    
                     st.markdown(f"""
                     <div class="action-card pause-card" style="padding:0.5rem 0.8rem; margin-bottom:0.3rem;">
-                        <strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{row['nom'][:30]}...</span> {trend_badge}
-                        <div style="font-size:0.7rem; color:{COLORS['text_secondary']};">Freq. {row['frequency']:.2f}</div>
+                        <div style="display:flex; align-items:center;">
+                            {thumb_html}
+                            <div>
+                                <strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{row['nom'][:30]}...</span> {trend_badge}
+                                <div style="font-size:0.7rem; color:{COLORS['text_secondary']};">Freq. {row['frequency']:.2f}</div>
+                            </div>
+                        </div>
                     </div>
                     """, unsafe_allow_html=True)
                 if len(pause_df) > 3:
@@ -2599,15 +2879,21 @@ def main():
             display_df['Dép.'] = display_df['depense'].apply(lambda x: f"{x:.0f}€")
             display_df['Action'] = display_df['action'].apply(format_action_simple)
             
+            # Ajouter la colonne thumbnail si disponible
+            if has_thumbnails and 'thumbnail_url' in display_df.columns:
+                display_df['Thumb'] = display_df['thumbnail_url'].fillna('')
+                columns_display = ['Thumb', 'Type', 'Nom', 'Score', 'Trend', 'ROAS', 'Profit', 'CTR', 'Dép.', 'scale_potential', 'Action']
+            else:
+                columns_display = ['Type', 'Nom', 'Score', 'Trend', 'ROAS', 'Profit', 'CTR', 'Dép.', 'scale_potential', 'Action']
+            
             # Sélectionner les colonnes (ordre optimisé pour voir le nom)
-            columns_display = ['Type', 'Nom', 'Score', 'Trend', 'ROAS', 'Profit', 'CTR', 'Dép.', 'scale_potential', 'Action']
             final_df = display_df[columns_display].copy()
             final_df = final_df.rename(columns={'scale_potential': 'Pot.'})
             
             # Configuration des colonnes - NOM très large, autres colonnes compactes
             column_config = {
                 "Type": st.column_config.TextColumn("Fmt", width=45),
-                "Nom": st.column_config.TextColumn("Nom de la créative", width=450),  # Largeur fixe importante
+                "Nom": st.column_config.TextColumn("Nom de la créative", width=400 if has_thumbnails else 450),  # Largeur ajustée
                 "Score": st.column_config.TextColumn("📊", width=75, help="Score global"),
                 "Trend": st.column_config.TextColumn("📈", width=65, help="Tendance"),
                 "ROAS": st.column_config.TextColumn("💰", width=55, help="ROAS"),
@@ -2617,6 +2903,10 @@ def main():
                 "Pot.": st.column_config.ProgressColumn("🎯", format="%d", min_value=0, max_value=100, width=70, help="Potentiel"),
                 "Action": st.column_config.TextColumn("⚡", width=80, help="Action recommandée"),
             }
+            
+            # Ajouter la config pour thumbnail si disponible
+            if has_thumbnails and 'Thumb' in final_df.columns:
+                column_config["Thumb"] = st.column_config.ImageColumn("🖼️", width=55, help="Miniature")
             
             # Hauteur dynamique
             table_height = min(550, max(300, 50 + len(final_df) * 40))
@@ -2641,10 +2931,22 @@ def main():
                 )
                 if creative_select:
                     selected_row = filtered_df[filtered_df['nom'] == creative_select].iloc[0]
+                    
+                    # Thumbnail HTML si disponible
+                    thumb_section = ""
+                    if has_thumbnails and pd.notna(selected_row.get('thumbnail_url')):
+                        thumb_section = f'''
+                        <div style="float:left; margin-right:1.5rem; margin-bottom:1rem;">
+                            <img src="{selected_row['thumbnail_url']}" style="width:120px; height:120px; object-fit:cover; border-radius:12px; border:2px solid {COLORS['border']};" onerror="this.style.display='none'"/>
+                        </div>
+                        '''
+                    
                     st.markdown(f"""
-                    <div style="background:{COLORS['bg_secondary']}; border:1px solid {COLORS['border']}; border-radius:12px; padding:1.25rem;">
+                    <div style="background:{COLORS['bg_secondary']}; border:1px solid {COLORS['border']}; border-radius:12px; padding:1.25rem; overflow:hidden;">
+                        {thumb_section}
                         <div style="color:{COLORS['text_muted']}; font-size:0.75rem; text-transform:uppercase; margin-bottom:0.5rem;">Nom complet</div>
                         <div style="color:{COLORS['text_primary']}; font-size:1rem; font-weight:500; word-break:break-all; line-height:1.5;">{creative_select}</div>
+                        <div style="clear:both;"></div>
                         <div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:1rem; margin-top:1rem; padding-top:1rem; border-top:1px solid {COLORS['border']};">
                             <div>
                                 <div style="color:{COLORS['text_muted']}; font-size:0.7rem;">Format</div>
@@ -2882,6 +3184,31 @@ def main():
         
         if len(selected) >= 2:
             compare_df = df[df['nom'].isin(selected)]
+            
+            # Afficher les thumbnails des créatives sélectionnées
+            if has_thumbnails:
+                st.subheader("🖼️ Créatives sélectionnées")
+                thumb_cols = st.columns(len(selected))
+                for i, nom in enumerate(selected):
+                    row = compare_df[compare_df['nom'] == nom].iloc[0]
+                    with thumb_cols[i]:
+                        thumb_url = row.get('thumbnail_url') if pd.notna(row.get('thumbnail_url')) else None
+                        if thumb_url:
+                            st.markdown(f'''
+                            <div style="text-align:center;">
+                                <img src="{thumb_url}" style="width:100px; height:100px; object-fit:cover; border-radius:12px; border:2px solid {COLORS['border']}; margin-bottom:8px;" onerror="this.style.display='none'"/>
+                                <div style="font-size:0.75rem; color:{COLORS['text_secondary']};">{row['format']}</div>
+                                <div style="font-size:0.7rem; color:{COLORS['text_muted']}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:120px; margin:0 auto;">{nom[:20]}...</div>
+                            </div>
+                            ''', unsafe_allow_html=True)
+                        else:
+                            st.markdown(f'''
+                            <div style="text-align:center;">
+                                <div style="width:100px; height:100px; background:{COLORS['bg_tertiary']}; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:40px; margin:0 auto 8px auto; border:2px solid {COLORS['border']};">🖼️</div>
+                                <div style="font-size:0.75rem; color:{COLORS['text_secondary']};">{row['format']}</div>
+                                <div style="font-size:0.7rem; color:{COLORS['text_muted']}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:120px; margin:0 auto;">{nom[:20]}...</div>
+                            </div>
+                            ''', unsafe_allow_html=True)
             
             if has_daily:
                 st.subheader("📈 Évolution CTR")
