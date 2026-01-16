@@ -979,8 +979,16 @@ def load_daily_data(uploaded_file):
         if col in df.columns:
             df[col] = df[col].apply(clean_numeric)
     
-    if 'date_debut' in df.columns:
-        df['date'] = pd.to_datetime(df['date_debut'], dayfirst=True, errors='coerce')
+    # Chercher la colonne date avec plusieurs variantes
+    date_col = None
+    date_variants = ['date_debut', 'Début des rapports', 'Date', 'date', 'Jour', 'jour', 'Day', 'day', 'Reporting starts']
+    for variant in date_variants:
+        if variant in df.columns:
+            date_col = variant
+            break
+    
+    if date_col:
+        df['date'] = pd.to_datetime(df[date_col], dayfirst=True, errors='coerce')
     
     return df
 
@@ -1963,10 +1971,37 @@ def main():
         if uploaded_daily:
             try:
                 df_daily = load_daily_data(uploaded_daily)
+                
+                # Debug: afficher les infos du fichier quotidien
+                with st.sidebar.expander("🔍 Debug données quotidiennes", expanded=False):
+                    st.write(f"**Lignes:** {len(df_daily)}")
+                    st.write(f"**Colonnes:** {list(df_daily.columns)}")
+                    if 'date' in df_daily.columns:
+                        st.write(f"**Dates:** {df_daily['date'].min()} → {df_daily['date'].max()}")
+                    else:
+                        st.warning("⚠️ Colonne 'date' non trouvée!")
+                    if 'nom' in df_daily.columns:
+                        noms_daily = set(df_daily['nom'].unique())
+                        noms_main = set(df['nom'].unique())
+                        noms_communs = noms_daily.intersection(noms_main)
+                        st.write(f"**Créatives quotidien:** {len(noms_daily)}")
+                        st.write(f"**Créatives principal:** {len(noms_main)}")
+                        st.write(f"**Noms communs:** {len(noms_communs)}")
+                        if len(noms_communs) == 0:
+                            st.error("❌ Aucun nom ne correspond entre les 2 fichiers!")
+                            st.write("**Exemple noms quotidien:**")
+                            st.code(list(noms_daily)[:3])
+                            st.write("**Exemple noms principal:**")
+                            st.code(list(noms_main)[:3])
+                    else:
+                        st.warning("⚠️ Colonne 'nom' non trouvée!")
+                
                 trends, sparklines = calculate_trends_from_daily(df_daily)
                 has_daily = len(trends) > 0
                 if has_daily:
                     st.sidebar.success(f"📈 {len(trends)} tendances calculées")
+                else:
+                    st.sidebar.warning("⚠️ 0 tendance calculée - vérifiez le debug ci-dessus")
             except Exception as e:
                 st.sidebar.warning(f"⚠️ Erreur: {str(e)}")
         
