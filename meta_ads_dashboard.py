@@ -3135,35 +3135,65 @@ def main():
                     cvr_q25, cvr_q50, cvr_q75 = filtered_df[filtered_df['cvr'] > 0]['cvr'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cvr'] > 0]) > 0 else (1, 2, 5)
                     panier_q25, panier_q50, panier_q75 = filtered_df[filtered_df['panier_moyen'] > 0]['panier_moyen'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['panier_moyen'] > 0]) > 0 else (20, 40, 80)
                     
-                    profit_df = filtered_df[['nom', 'format', 'roas', 'cpa_calc', 'cvr', 'panier_moyen', 'profit_estime', 'is_profitable', 'achats', 'score_profitabilite']].copy()
+                    profit_cols = ['nom', 'format', 'roas', 'cpa_calc', 'cvr', 'panier_moyen', 'profit_estime', 'is_profitable', 'achats', 'score_profitabilite']
+                    if has_thumbnails:
+                        profit_cols.insert(0, 'thumbnail_url')
+                    profit_df = filtered_df[profit_cols].copy()
                     profit_df['ROAS'] = profit_df['roas'].apply(lambda x: format_metric_color(x, (roas_q25, roas_q50, roas_q75), inverse=False, decimals=2))
                     profit_df['CPA'] = profit_df['cpa_calc'].apply(lambda x: format_metric_color(x, (cpa_q25, cpa_q50, cpa_q75), inverse=True, suffix="€", decimals=2))
                     profit_df['CVR'] = profit_df['cvr'].apply(lambda x: format_metric_color(x, (cvr_q25, cvr_q50, cvr_q75), inverse=False, suffix="%", decimals=2))
                     profit_df['Panier'] = profit_df['panier_moyen'].apply(lambda x: format_metric_color(x, (panier_q25, panier_q50, panier_q75), inverse=False, suffix="€", decimals=0))
                     profit_df['Profit €'] = profit_df.apply(lambda r: f"{'✅' if r['is_profitable'] else '❌'} {r['profit_estime']:+,.0f}€", axis=1)
                     profit_df['Score'] = profit_df['score_profitabilite'].apply(format_score_color)
-                    st.dataframe(profit_df[['format', 'nom', 'ROAS', 'CPA', 'CVR', 'Panier', 'Profit €', 'achats', 'Score']], use_container_width=True, height=min(300, 40 + len(profit_df) * 35), hide_index=True)
+                    
+                    display_cols = ['format', 'nom', 'ROAS', 'CPA', 'CVR', 'Panier', 'Profit €', 'achats', 'Score']
+                    col_config = {}
+                    if has_thumbnails:
+                        profit_df.rename(columns={'thumbnail_url': 'Thumb'}, inplace=True)
+                        display_cols.insert(0, 'Thumb')
+                        col_config['Thumb'] = st.column_config.ImageColumn("🖼️", width=50)
+                    st.dataframe(profit_df[display_cols], use_container_width=True, height=min(300, 40 + len(profit_df) * 35), hide_index=True, column_config=col_config)
                 
                 with tab_trafic:
                     st.caption("**Score Trafic** = CTR (50%) + CPC inversé (30%) + Clics (20%)")
                     cpc_q25, cpc_q50, cpc_q75 = filtered_df[filtered_df['cpc_lien'] > 0]['cpc_lien'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cpc_lien'] > 0]) > 0 else (0.2, 0.5, 1)
                     clics_q25, clics_q50, clics_q75 = filtered_df['clics_lien'].quantile([0.25, 0.5, 0.75])
                     
-                    trafic_df = filtered_df[['nom', 'format', 'ctr_lien', 'cpc_lien', 'clics_lien', 'impressions', 'score_trafic']].copy()
+                    trafic_cols = ['nom', 'format', 'ctr_lien', 'cpc_lien', 'clics_lien', 'impressions', 'score_trafic']
+                    if has_thumbnails:
+                        trafic_cols.insert(0, 'thumbnail_url')
+                    trafic_df = filtered_df[trafic_cols].copy()
                     trafic_df['CTR'] = trafic_df['ctr_lien'].apply(lambda x: format_metric_color(x, (ctr_q25, ctr_q50, ctr_q75), inverse=False, suffix="%", decimals=2))
                     trafic_df['CPC'] = trafic_df['cpc_lien'].apply(lambda x: format_metric_color(x, (cpc_q25, cpc_q50, cpc_q75), inverse=True, suffix="€", decimals=2))
                     trafic_df['Clics'] = trafic_df['clics_lien'].apply(lambda x: format_metric_color(x, (clics_q25, clics_q50, clics_q75), inverse=False, decimals=0))
                     trafic_df['Score'] = trafic_df['score_trafic'].apply(format_score_color)
-                    st.dataframe(trafic_df[['format', 'nom', 'CTR', 'CPC', 'Clics', 'Score']], use_container_width=True, height=min(300, 40 + len(trafic_df) * 35), hide_index=True)
+                    
+                    display_cols = ['format', 'nom', 'CTR', 'CPC', 'Clics', 'Score']
+                    col_config = {}
+                    if has_thumbnails:
+                        trafic_df.rename(columns={'thumbnail_url': 'Thumb'}, inplace=True)
+                        display_cols.insert(0, 'Thumb')
+                        col_config['Thumb'] = st.column_config.ImageColumn("🖼️", width=50)
+                    st.dataframe(trafic_df[display_cols], use_container_width=True, height=min(300, 40 + len(trafic_df) * 35), hide_index=True, column_config=col_config)
                 
                 with tab_notoriete:
                     st.caption("**Score Notoriété** = CPMu inversé (50%) + Couverture (50%)")
-                    notoriete_df = filtered_df[['nom', 'format', 'cpmu', 'cpm', 'reach', 'frequency', 'score_notoriete']].copy()
+                    notoriete_cols = ['nom', 'format', 'cpmu', 'cpm', 'reach', 'frequency', 'score_notoriete']
+                    if has_thumbnails:
+                        notoriete_cols.insert(0, 'thumbnail_url')
+                    notoriete_df = filtered_df[notoriete_cols].copy()
                     notoriete_df['CPMu'] = notoriete_df['cpmu'].apply(lambda x: format_metric_color(x, (cpmu_q25, cpmu_q50, cpmu_q75), inverse=True, suffix="€", decimals=2))
                     notoriete_df['CPM'] = notoriete_df['cpm'].apply(lambda x: format_metric_color(x, (cpm_q25, cpm_q50, cpm_q75), inverse=True, suffix="€", decimals=2))
                     notoriete_df['Reach'] = notoriete_df['reach'].apply(lambda x: format_metric_color(x, (reach_q25, reach_q50, reach_q75), inverse=False, decimals=0))
                     notoriete_df['Score'] = notoriete_df['score_notoriete'].apply(format_score_color)
-                    st.dataframe(notoriete_df[['format', 'nom', 'CPMu', 'CPM', 'Reach', 'Score']], use_container_width=True, height=min(300, 40 + len(notoriete_df) * 35), hide_index=True)
+                    
+                    display_cols = ['format', 'nom', 'CPMu', 'CPM', 'Reach', 'Score']
+                    col_config = {}
+                    if has_thumbnails:
+                        notoriete_df.rename(columns={'thumbnail_url': 'Thumb'}, inplace=True)
+                        display_cols.insert(0, 'Thumb')
+                        col_config['Thumb'] = st.column_config.ImageColumn("🖼️", width=50)
+                    st.dataframe(notoriete_df[display_cols], use_container_width=True, height=min(300, 40 + len(notoriete_df) * 35), hide_index=True, column_config=col_config)
                 
                 with tab_tendance:
                     if has_daily:
@@ -3190,7 +3220,10 @@ def main():
                             else:
                                 return f"🔴 {score:+.0f} (Chute)"
                         
-                        tendance_df = filtered_df[['nom', 'format', 'trend_ctr', 'trend_cpm', 'trend_score']].copy()
+                        tendance_cols = ['nom', 'format', 'trend_ctr', 'trend_cpm', 'trend_score']
+                        if has_thumbnails:
+                            tendance_cols.insert(0, 'thumbnail_url')
+                        tendance_df = filtered_df[tendance_cols].copy()
                         tendance_df['trend_cpc'] = tendance_df['nom'].apply(lambda x: trends.get(x, {}).get('cpc', 0))
                         tendance_df['trend_impr'] = tendance_df['nom'].apply(lambda x: trends.get(x, {}).get('impressions', 0))
                         
@@ -3201,9 +3234,16 @@ def main():
                         tendance_df['Score'] = tendance_df['trend_score'].apply(format_trend_score)
                         
                         tendance_df = tendance_df.sort_values('trend_score', ascending=False)
-                        st.dataframe(tendance_df[['format', 'nom', 'Δ CTR', 'Δ CPC', 'Δ CPM', 'Δ Impr.', 'Score']], use_container_width=True, height=min(300, 40 + len(tendance_df) * 35), hide_index=True)
+                        
+                        display_cols = ['format', 'nom', 'Δ CTR', 'Δ CPC', 'Δ CPM', 'Δ Impr.', 'Score']
+                        col_config = {}
+                        if has_thumbnails:
+                            tendance_df.rename(columns={'thumbnail_url': 'Thumb'}, inplace=True)
+                            display_cols.insert(0, 'Thumb')
+                            col_config['Thumb'] = st.column_config.ImageColumn("🖼️", width=50)
+                        st.dataframe(tendance_df[display_cols], use_container_width=True, height=min(300, 40 + len(tendance_df) * 35), hide_index=True, column_config=col_config)
                     else:
-                        st.info("⚠️ Chargez les données quotidiennes pour voir les tendances.")
+                        st.info("📊 **Données quotidiennes requises** pour calculer les tendances.\n\nPour activer cette fonctionnalité :\n1. Exportez vos données Meta Ads avec la **ventilation par jour**\n2. Chargez ce fichier dans le champ **'Données quotidiennes'** de la sidebar")
         
         # ===== DÉTAIL CRÉATIVE (COMPACT) =====
         if filtered_creatives > 0:
