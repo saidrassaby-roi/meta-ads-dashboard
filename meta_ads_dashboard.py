@@ -1958,7 +1958,15 @@ def main():
                 nb_thumbs = df['thumbnail_url'].notna().sum()
                 st.success(f"🖼️ {nb_thumbs}/{len(df)} thumbnails chargés")
     elif st.session_state.api_connected and 'ad_id' not in df.columns:
-        st.warning("⚠️ Colonne 'ID de la publicité' non trouvée dans le CSV. Ajoutez-la pour afficher les thumbnails.")
+        # Debug: afficher les colonnes disponibles pour aider l'utilisateur
+        all_cols = list(df.columns)
+        # Chercher les colonnes qui pourraient être l'ID
+        potential_id_cols = [c for c in all_cols if any(x in c.lower() for x in ['id', 'nº', 'n°', 'numero', 'numéro'])]
+        
+        with st.expander("⚠️ Colonne 'ID de la publicité' non trouvée - Cliquez pour voir les détails", expanded=True):
+            st.write("**Colonnes potentielles détectées:**", potential_id_cols if potential_id_cols else "Aucune")
+            st.write("**Toutes les colonnes du CSV:**")
+            st.code(", ".join(all_cols))
     
     # Tabs
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
