@@ -2968,7 +2968,110 @@ def main():
             display_df = filtered_df.copy()
             roas_seuil = display_df['roas_seuil'].iloc[0] if 'roas_seuil' in display_df.columns else 2.5
             
-            # Format avec emoji
+            # ===== SÉLECTEUR DE COLONNES =====
+            # Définir toutes les colonnes disponibles par catégorie
+            col_categories = {
+                "🖼️ Identification": {
+                    "Thumb": ("thumbnail_url", "Miniature"),
+                    "Format": ("format", "Type de créative"),
+                    "Nom": ("nom", "Nom complet"),
+                    "Campagne": ("campagne", "Nom de campagne"),
+                    "Audience": ("audience", "Ensemble de publicités"),
+                },
+                "📊 Scores calculés": {
+                    "Score Global": ("score_global", "Score pondéré"),
+                    "Score Profit": ("score_profitabilite", "Score profitabilité V2"),
+                    "Score Trafic": ("score_trafic", "Score trafic"),
+                    "Score Notoriété": ("score_notoriete", "Score notoriété"),
+                    "Potentiel": ("scale_potential", "Potentiel de scale"),
+                    "Action": ("action", "Action recommandée"),
+                    "Confiance": ("coefficient_confiance", "Coefficient de confiance"),
+                },
+                "📈 Tendances": {
+                    "Trend Score": ("trend_score", "Score tendance global"),
+                    "Trend CTR": ("trend_ctr", "Évolution CTR %"),
+                    "Trend CPM": ("trend_cpm", "Évolution CPM %"),
+                },
+                "💰 Profit & ROAS": {
+                    "ROAS": ("roas", "Return On Ad Spend"),
+                    "Profit €": ("profit_estime", "Profit estimé"),
+                    "Rentable": ("is_profitable", "Est rentable"),
+                    "CPA": ("cpa_calc", "Coût par achat"),
+                    "CVR %": ("cvr", "Taux de conversion"),
+                    "Panier moyen": ("panier_moyen", "Valeur moyenne panier"),
+                    "ROAS Seuil": ("roas_seuil", "Seuil de rentabilité"),
+                },
+                "🚀 Trafic": {
+                    "CTR %": ("ctr_lien", "Click-Through Rate"),
+                    "CPC €": ("cpc_lien", "Coût par clic"),
+                    "Clics": ("clics_lien", "Nombre de clics"),
+                },
+                "👁️ Notoriété": {
+                    "CPM €": ("cpm", "Coût pour 1000 impressions"),
+                    "CPMu €": ("cpmu", "CPM unique"),
+                    "Impressions": ("impressions", "Total impressions"),
+                    "Reach": ("reach", "Couverture unique"),
+                    "Fréquence": ("frequency", "Répétition moyenne"),
+                },
+                "💵 Dépenses & Achats": {
+                    "Dépense €": ("depense", "Budget dépensé"),
+                    "Achats": ("achats", "Nombre d'achats"),
+                    "Valeur achats €": ("valeur_achats", "Revenu total"),
+                    "Ajouts panier": ("ajouts_panier", "Ajouts au panier"),
+                },
+            }
+            
+            # Presets de colonnes
+            presets = {
+                "🎯 Essentiel": ["Thumb", "Format", "Nom", "Score Global", "Trend Score", "ROAS", "Profit €", "CTR %", "Dépense €", "Potentiel", "Action"],
+                "📊 Tous les scores": ["Thumb", "Format", "Nom", "Score Global", "Score Profit", "Score Trafic", "Score Notoriété", "Potentiel", "Confiance", "Action"],
+                "💰 Focus Profit": ["Thumb", "Format", "Nom", "ROAS", "Profit €", "Rentable", "CPA", "CVR %", "Panier moyen", "Achats", "Action"],
+                "🚀 Focus Trafic": ["Thumb", "Format", "Nom", "CTR %", "CPC €", "Clics", "Impressions", "Score Trafic", "Action"],
+                "📈 Focus Tendances": ["Thumb", "Format", "Nom", "Trend Score", "Trend CTR", "Trend CPM", "Score Global", "Action"],
+                "📋 Complet": ["Thumb", "Format", "Nom", "Score Global", "ROAS", "Profit €", "CTR %", "CPC €", "CPM €", "Impressions", "Reach", "Dépense €", "Achats", "Potentiel", "Action"],
+            }
+            
+            # Initialiser la sélection dans session_state
+            if 'selected_columns' not in st.session_state:
+                st.session_state.selected_columns = presets["🎯 Essentiel"]
+            
+            # Interface de sélection
+            with st.expander("⚙️ Colonnes à afficher", expanded=False):
+                col_preset, col_select = st.columns([1, 2])
+                
+                with col_preset:
+                    st.markdown("**Presets rapides**")
+                    selected_preset = st.radio(
+                        "Preset",
+                        options=list(presets.keys()),
+                        index=0,
+                        label_visibility="collapsed",
+                        key="column_preset"
+                    )
+                    if st.button("Appliquer le preset", use_container_width=True):
+                        st.session_state.selected_columns = presets[selected_preset]
+                        st.rerun()
+                
+                with col_select:
+                    st.markdown("**Sélection personnalisée**")
+                    # Créer la liste de toutes les colonnes disponibles
+                    all_columns = []
+                    for cat, cols in col_categories.items():
+                        for col_name, (col_key, col_help) in cols.items():
+                            if col_key in display_df.columns or (col_name == "Thumb" and has_thumbnails):
+                                all_columns.append(col_name)
+                    
+                    selected_cols = st.multiselect(
+                        "Colonnes",
+                        options=all_columns,
+                        default=st.session_state.selected_columns,
+                        label_visibility="collapsed",
+                        key="column_multiselect"
+                    )
+                    st.session_state.selected_columns = selected_cols
+            
+            # ===== PRÉPARATION DES DONNÉES =====
+            # Fonctions de formatage
             def format_type_emoji(fmt):
                 emojis = {'IMG': '🖼️', 'VID': '🎬', 'CAR': '🎠', 'GIF': '✨', 'UGC': '👤', 'STO': '📱'}
                 return f"{emojis.get(fmt, '📄')} {fmt}"
@@ -2979,6 +3082,8 @@ def main():
                 return f"{icons.get(grade, '⚪')} {grade} ({score})"
             
             def format_trend_simple(value):
+                if pd.isna(value) or value == 0:
+                    return "➖ 0%"
                 if value > 15:
                     return f"🟢 +{value:.0f}%"
                 elif value > 0:
@@ -3007,57 +3112,102 @@ def main():
                 icons = {'scale': '🚀 SCALE', 'test': '⚡ TEST', 'monitor': '👁️ WATCH', 'pause': '⏸️ PAUSE'}
                 return icons.get(action, action)
             
-            # Construire les colonnes
-            display_df['Type'] = display_df['format']  # Juste le code format (plus compact)
-            display_df['Nom'] = display_df['nom']  # Nom complet
-            display_df['Score'] = display_df['score_global'].apply(format_grade_simple)
-            display_df['Trend'] = display_df['trend_score'].apply(format_trend_simple) if has_daily else "➖"
-            display_df['ROAS'] = display_df['roas'].apply(lambda x: format_roas_simple(x, roas_seuil))
-            display_df['Profit'] = display_df.apply(lambda r: format_profit_simple(r.get('is_profitable', False), r.get('profit_estime', 0)), axis=1)
-            display_df['CTR'] = display_df['ctr_lien'].apply(lambda x: f"{x:.2f}%")
-            display_df['Dép.'] = display_df['depense'].apply(lambda x: f"{x:.0f}€")
-            display_df['Action'] = display_df['action'].apply(format_action_simple)
+            # Créer le DataFrame final avec les colonnes sélectionnées
+            final_data = {}
+            column_config = {}
             
-            # Ajouter la colonne thumbnail si disponible
-            if has_thumbnails and 'thumbnail_url' in display_df.columns:
-                display_df['Thumb'] = display_df['thumbnail_url'].fillna('')
-                columns_display = ['Thumb', 'Type', 'Nom', 'Score', 'Trend', 'ROAS', 'Profit', 'CTR', 'Dép.', 'scale_potential', 'Action']
-            else:
-                columns_display = ['Type', 'Nom', 'Score', 'Trend', 'ROAS', 'Profit', 'CTR', 'Dép.', 'scale_potential', 'Action']
+            for col_name in st.session_state.selected_columns:
+                # Trouver la colonne source
+                for cat, cols in col_categories.items():
+                    if col_name in cols:
+                        col_key, col_help = cols[col_name]
+                        
+                        if col_name == "Thumb" and has_thumbnails and 'thumbnail_url' in display_df.columns:
+                            final_data[col_name] = display_df['thumbnail_url'].fillna('')
+                            column_config[col_name] = st.column_config.ImageColumn("🖼️", width=55)
+                        elif col_key in display_df.columns:
+                            # Formater selon le type
+                            if col_name == "Format":
+                                final_data[col_name] = display_df[col_key]
+                                column_config[col_name] = st.column_config.TextColumn("Fmt", width=50)
+                            elif col_name == "Nom":
+                                final_data[col_name] = display_df[col_key]
+                                column_config[col_name] = st.column_config.TextColumn("Nom", width=350)
+                            elif col_name == "Score Global":
+                                final_data[col_name] = display_df[col_key].apply(format_grade_simple)
+                                column_config[col_name] = st.column_config.TextColumn("Score", width=80)
+                            elif col_name in ["Score Profit", "Score Trafic", "Score Notoriété"]:
+                                final_data[col_name] = display_df[col_key].apply(lambda x: f"{x:.0f}")
+                                column_config[col_name] = st.column_config.TextColumn(col_name.replace("Score ", ""), width=70)
+                            elif col_name == "Potentiel":
+                                final_data[col_name] = display_df[col_key]
+                                column_config[col_name] = st.column_config.ProgressColumn("Pot.", format="%d", min_value=0, max_value=100, width=80)
+                            elif col_name == "Action":
+                                final_data[col_name] = display_df[col_key].apply(format_action_simple)
+                                column_config[col_name] = st.column_config.TextColumn("Action", width=90)
+                            elif col_name == "Confiance":
+                                final_data[col_name] = display_df[col_key].apply(lambda x: f"{x*100:.0f}%")
+                                column_config[col_name] = st.column_config.TextColumn("Conf.", width=60)
+                            elif col_name in ["Trend Score", "Trend CTR", "Trend CPM"]:
+                                final_data[col_name] = display_df[col_key].apply(format_trend_simple)
+                                column_config[col_name] = st.column_config.TextColumn(col_name.replace("Trend ", "Δ"), width=70)
+                            elif col_name == "ROAS":
+                                final_data[col_name] = display_df[col_key].apply(lambda x: format_roas_simple(x, roas_seuil))
+                                column_config[col_name] = st.column_config.TextColumn("ROAS", width=70)
+                            elif col_name == "Profit €":
+                                final_data[col_name] = display_df.apply(lambda r: format_profit_simple(r.get('is_profitable', False), r.get('profit_estime', 0)), axis=1)
+                                column_config[col_name] = st.column_config.TextColumn("Profit", width=85)
+                            elif col_name == "Rentable":
+                                final_data[col_name] = display_df[col_key].apply(lambda x: "✅ Oui" if x else "❌ Non")
+                                column_config[col_name] = st.column_config.TextColumn("Rent.", width=65)
+                            elif col_name in ["CTR %", "CVR %"]:
+                                final_data[col_name] = display_df[col_key].apply(lambda x: f"{x:.2f}%")
+                                column_config[col_name] = st.column_config.TextColumn(col_name.replace(" %", ""), width=65)
+                            elif col_name in ["CPC €", "CPM €", "CPMu €", "CPA"]:
+                                final_data[col_name] = display_df[col_key].apply(lambda x: f"{x:.2f}€" if x > 0 else "➖")
+                                column_config[col_name] = st.column_config.TextColumn(col_name.replace(" €", ""), width=65)
+                            elif col_name == "Dépense €":
+                                final_data[col_name] = display_df[col_key].apply(lambda x: f"{x:.0f}€")
+                                column_config[col_name] = st.column_config.TextColumn("Dép.", width=60)
+                            elif col_name == "Panier moyen":
+                                final_data[col_name] = display_df[col_key].apply(lambda x: f"{x:.0f}€" if x > 0 else "➖")
+                                column_config[col_name] = st.column_config.TextColumn("Panier", width=65)
+                            elif col_name == "Valeur achats €":
+                                final_data[col_name] = display_df[col_key].apply(lambda x: f"{x:,.0f}€")
+                                column_config[col_name] = st.column_config.TextColumn("CA", width=80)
+                            elif col_name in ["Impressions", "Reach", "Clics", "Achats", "Ajouts panier"]:
+                                final_data[col_name] = display_df[col_key].apply(lambda x: f"{x:,.0f}")
+                                column_config[col_name] = st.column_config.TextColumn(col_name[:5], width=70)
+                            elif col_name == "Fréquence":
+                                final_data[col_name] = display_df[col_key].apply(lambda x: f"{x:.2f}")
+                                column_config[col_name] = st.column_config.TextColumn("Freq.", width=60)
+                            elif col_name == "ROAS Seuil":
+                                final_data[col_name] = display_df[col_key].apply(lambda x: f"{x:.2f}")
+                                column_config[col_name] = st.column_config.TextColumn("Seuil", width=60)
+                            elif col_name in ["Campagne", "Audience"]:
+                                final_data[col_name] = display_df[col_key]
+                                column_config[col_name] = st.column_config.TextColumn(col_name, width=150)
+                            else:
+                                final_data[col_name] = display_df[col_key]
+                                column_config[col_name] = st.column_config.TextColumn(col_name, width=80)
+                        break
             
-            # Sélectionner les colonnes (ordre optimisé pour voir le nom)
-            final_df = display_df[columns_display].copy()
-            final_df = final_df.rename(columns={'scale_potential': 'Pot.'})
-            
-            # Configuration des colonnes - NOM très large, autres colonnes compactes
-            column_config = {
-                "Type": st.column_config.TextColumn("Fmt", width=50),
-                "Nom": st.column_config.TextColumn("Nom de la créative", width=380 if has_thumbnails else 430),
-                "Score": st.column_config.TextColumn("Score", width=70, help="Score global"),
-                "Trend": st.column_config.TextColumn("Trend", width=65, help="Tendance 7 jours"),
-                "ROAS": st.column_config.TextColumn("ROAS", width=60, help="Return On Ad Spend"),
-                "Profit": st.column_config.TextColumn("Profit", width=80, help="Profit estimé"),
-                "CTR": st.column_config.TextColumn("CTR", width=60, help="Click-Through Rate"),
-                "Dép.": st.column_config.TextColumn("Dép.", width=55, help="Dépense totale"),
-                "Pot.": st.column_config.ProgressColumn("Potentiel", format="%d", min_value=0, max_value=100, width=80, help="Potentiel de scale"),
-                "Action": st.column_config.TextColumn("Action", width=85, help="Action recommandée"),
-            }
-            
-            # Ajouter la config pour thumbnail si disponible
-            if has_thumbnails and 'Thumb' in final_df.columns:
-                column_config["Thumb"] = st.column_config.ImageColumn("Thumb", width=55, help="Miniature de la créative")
-            
-            # Hauteur dynamique
-            table_height = min(550, max(300, 50 + len(final_df) * 40))
-            
-            # Afficher
-            st.dataframe(
-                final_df,
-                use_container_width=True,
-                height=table_height,
-                column_config=column_config,
-                hide_index=True
-            )
+            if len(final_data) > 0:
+                final_df = pd.DataFrame(final_data)
+                
+                # Hauteur dynamique
+                table_height = min(550, max(300, 50 + len(final_df) * 40))
+                
+                # Afficher le tableau
+                st.dataframe(
+                    final_df,
+                    use_container_width=True,
+                    height=table_height,
+                    column_config=column_config,
+                    hide_index=True
+                )
+                
+                st.caption(f"📊 {len(final_df)} créatives · {len(st.session_state.selected_columns)} colonnes affichées")
             
             # Section détails créative
             st.markdown(f"<div style='margin-top:1rem;'></div>", unsafe_allow_html=True)
