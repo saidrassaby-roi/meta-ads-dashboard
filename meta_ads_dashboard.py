@@ -785,13 +785,13 @@ def escape_html(text):
             .replace("'", "&#39;"))
 
 
-def normalize_column_name(name):
-    """Normalise un nom de colonne pour la comparaison."""
+def normalize_text(text):
+    """Normalise un texte pour la comparaison (minuscules, sans accents)."""
     import unicodedata
-    # Normaliser les caractères Unicode (º, °, etc.)
-    normalized = unicodedata.normalize('NFKD', str(name))
-    # Convertir en minuscules et retirer les espaces multiples
-    return ' '.join(normalized.lower().split())
+    # Normaliser et enlever les accents
+    normalized = unicodedata.normalize('NFKD', str(text))
+    ascii_text = normalized.encode('ASCII', 'ignore').decode('ASCII')
+    return ascii_text.lower().strip()
 
 
 def find_column(df, possible_names):
@@ -803,17 +803,35 @@ def find_column(df, possible_names):
     
     # Ensuite essayer avec normalisation
     for name in possible_names:
-        norm_name = normalize_column_name(name)
+        norm_name = normalize_text(name)
         for col in df.columns:
-            norm_col = normalize_column_name(col)
+            norm_col = normalize_text(col)
             if norm_col == norm_name:
                 return col
             # Correspondance partielle
             if norm_name in norm_col or norm_col in norm_name:
                 return col
-            # Chercher "publicite" ou "publicité" dans les deux
-            if 'publicite' in norm_name.replace('é', 'e') and 'publicite' in norm_col.replace('é', 'e'):
-                return col
+    return None
+
+
+def find_ad_id_column(df):
+    """Trouve spécifiquement la colonne contenant l'ID de publicité."""
+    for col in df.columns:
+        col_lower = col.lower()
+        col_normalized = normalize_text(col)
+        
+        # Chercher les patterns d'ID de publicité
+        # Pattern 1: Contient "publicité" ou "publicite" ET un indicateur d'ID
+        is_pub_col = 'publicite' in col_normalized or 'publicité' in col_lower
+        has_id_indicator = any(x in col_lower for x in ['n°', 'nº', 'id', 'numéro', 'numero'])
+        
+        if is_pub_col and has_id_indicator:
+            return col
+        
+        # Pattern 2: Nom exact connu
+        if col_normalized in ['n de la publicite', 'id de la publicite', 'ad id']:
+            return col
+    
     return None
 
 
@@ -858,6 +876,12 @@ def standardize_columns(df):
             rename_dict[found_col] = standard_name
     
     df = df.rename(columns=rename_dict)
+    
+    # Recherche spécifique pour ad_id si pas trouvé
+    if 'ad_id' not in df.columns:
+        ad_id_col = find_ad_id_column(df)
+        if ad_id_col:
+            df = df.rename(columns={ad_id_col: 'ad_id'})
     
     # Ajouter colonnes par défaut si absentes
     if 'campagne' not in df.columns:
