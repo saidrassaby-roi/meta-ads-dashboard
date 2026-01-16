@@ -773,15 +773,46 @@ def render_thumbnail_html(thumbnail_url, size=40, fallback_icon="🖼️"):
 # FONCTIONS DE TRAITEMENT
 # ============================================================================
 
+def escape_html(text):
+    """Échappe les caractères HTML pour un affichage sûr."""
+    if not isinstance(text, str):
+        return str(text)
+    return (text
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+            .replace("'", "&#39;"))
+
+
+def normalize_column_name(name):
+    """Normalise un nom de colonne pour la comparaison."""
+    import unicodedata
+    # Normaliser les caractères Unicode (º, °, etc.)
+    normalized = unicodedata.normalize('NFKD', str(name))
+    # Convertir en minuscules et retirer les espaces multiples
+    return ' '.join(normalized.lower().split())
+
+
 def find_column(df, possible_names):
     """Trouve une colonne parmi plusieurs noms possibles."""
+    # D'abord essayer une correspondance exacte
     for name in possible_names:
         if name in df.columns:
             return name
+    
+    # Ensuite essayer avec normalisation
+    for name in possible_names:
+        norm_name = normalize_column_name(name)
         for col in df.columns:
-            if col.lower() == name.lower():
+            norm_col = normalize_column_name(col)
+            if norm_col == norm_name:
                 return col
-            if name.lower() in col.lower():
+            # Correspondance partielle
+            if norm_name in norm_col or norm_col in norm_name:
+                return col
+            # Chercher "publicite" ou "publicité" dans les deux
+            if 'publicite' in norm_name.replace('é', 'e') and 'publicite' in norm_col.replace('é', 'e'):
                 return col
     return None
 
@@ -817,7 +848,7 @@ def standardize_columns(df):
         'ajouts_panier': ['Ajouts au panier', 'Adds to cart', 'ajouts_panier'],
         'date_debut': ['Début des rapports', 'Reporting starts', 'date_debut'],
         'date_fin': ['Fin des rapports', 'Reporting ends', 'date_fin'],
-        'ad_id': ['ID de la publicité', 'Ad ID', 'ad_id', 'ID publicité', 'id_publicite'],
+        'ad_id': ['ID de la publicité', 'Ad ID', 'ad_id', 'ID publicité', 'id_publicite', 'Nº de la publicité', 'N° de la publicité', 'Numéro de la publicité'],
     }
     
     rename_dict = {}
@@ -2118,26 +2149,27 @@ def main():
                         trend_badge = f"<span class='badge badge-down'>{row['trend_score']:.0f}%</span>"
                     
                     # Thumbnail
-                    thumb_html = ""
-                    if has_thumbnails and pd.notna(row.get('thumbnail_url')):
-                        thumb_html = f'''<img src="{row['thumbnail_url']}" style="width:44px; height:44px; object-fit:cover; border-radius:6px; margin-right:10px; border:1px solid {COLORS['border']};" onerror="this.style.display='none'"/>'''
-                    elif has_thumbnails:
-                        thumb_html = f'''<div style="width:44px; height:44px; background:{COLORS['bg_tertiary']}; border-radius:6px; margin-right:10px; display:flex; align-items:center; justify-content:center; font-size:18px; border:1px solid {COLORS['border']};">🖼️</div>'''
+                    thumb_url = row.get('thumbnail_url') if has_thumbnails and 'thumbnail_url' in row.index else None
+                    if thumb_url and pd.notna(thumb_url):
+                        thumb_html = f'<img src="{thumb_url}" style="width:44px; height:44px; object-fit:cover; border-radius:6px; margin-right:10px; border:1px solid {COLORS["border"]};" onerror="this.style.display=\'none\'"/>'
+                    else:
+                        thumb_html = ""
                     
-                    st.markdown(f"""
-                    <div class="action-card scale-card" style="padding:0.6rem 0.8rem; margin-bottom:0.4rem;">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <div style="display:flex; align-items:center;">
-                                {thumb_html}
-                                <div>
-                                    <strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{row['nom'][:35]}{'...' if len(row['nom']) > 35 else ''}</span> {trend_badge}
-                                    <div style="font-size:0.75rem; color:{COLORS['text_secondary']};">ROAS {row['roas']:.1f} · CTR {row['ctr_lien']:.2f}% · Pot. {row['scale_potential']}</div>
-                                </div>
-                            </div>
-                            <div style="font-size:0.7rem; background:{COLORS['accent_green']}; color:white; padding:2px 8px; border-radius:4px;">+20%</div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    # Échapper le nom pour le HTML
+                    nom_safe = escape_html(row['nom'][:35]) + ('...' if len(row['nom']) > 35 else '')
+                    
+                    card_html = f'''<div class="action-card scale-card" style="padding:0.6rem 0.8rem; margin-bottom:0.4rem;">
+<div style="display:flex; justify-content:space-between; align-items:center;">
+<div style="display:flex; align-items:center;">
+{thumb_html}<div>
+<strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{nom_safe}</span> {trend_badge}
+<div style="font-size:0.75rem; color:{COLORS['text_secondary']};">ROAS {row['roas']:.1f} · CTR {row['ctr_lien']:.2f}% · Pot. {row['scale_potential']}</div>
+</div>
+</div>
+<div style="font-size:0.7rem; background:{COLORS['accent_green']}; color:white; padding:2px 8px; border-radius:4px;">+20%</div>
+</div>
+</div>'''
+                    st.markdown(card_html, unsafe_allow_html=True)
                 if len(scale_df) > 4:
                     st.caption(f"... et {len(scale_df) - 4} autre(s)")
             else:
@@ -2156,16 +2188,11 @@ def main():
                     # Thumbnail
                     thumb_html = ""
                     if has_thumbnails and pd.notna(row.get('thumbnail_url')):
-                        thumb_html = f'''<img src="{row['thumbnail_url']}" style="width:32px; height:32px; object-fit:cover; border-radius:4px; margin-right:8px; border:1px solid {COLORS['border']};" onerror="this.style.display='none'"/>'''
+                        thumb_html = f'<img src="{row["thumbnail_url"]}" style="width:32px; height:32px; object-fit:cover; border-radius:4px; margin-right:8px; border:1px solid {COLORS["border"]};" onerror="this.style.display=\'none\'"/>'
                     
-                    st.markdown(f"""
-                    <div class="action-card monitor-card" style="padding:0.5rem 0.8rem; margin-bottom:0.3rem;">
-                        <div style="display:flex; align-items:center;">
-                            {thumb_html}
-                            <span><strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{row['nom'][:30]}...</span> <span style="color:{COLORS['text_muted']};">{trend_icon}</span></span>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    nom_safe = escape_html(row['nom'][:30]) + '...'
+                    card_html = f'<div class="action-card monitor-card" style="padding:0.5rem 0.8rem; margin-bottom:0.3rem;"><div style="display:flex; align-items:center;">{thumb_html}<span><strong style="color:{COLORS["text_primary"]};">{row["format"]}</strong> <span style="color:{COLORS["text_secondary"]};">·</span> <span style="color:{COLORS["text_primary"]};">{nom_safe}</span> <span style="color:{COLORS["text_muted"]};">{trend_icon}</span></span></div></div>'
+                    st.markdown(card_html, unsafe_allow_html=True)
         
         with col_right:
             # À tester (compact)
@@ -2175,26 +2202,26 @@ def main():
             if len(test_df) > 0:
                 for _, row in test_df.head(4).iterrows():
                     # Thumbnail
-                    thumb_html = ""
-                    if has_thumbnails and pd.notna(row.get('thumbnail_url')):
-                        thumb_html = f'''<img src="{row['thumbnail_url']}" style="width:44px; height:44px; object-fit:cover; border-radius:6px; margin-right:10px; border:1px solid {COLORS['border']};" onerror="this.style.display='none'"/>'''
-                    elif has_thumbnails:
-                        thumb_html = f'''<div style="width:44px; height:44px; background:{COLORS['bg_tertiary']}; border-radius:6px; margin-right:10px; display:flex; align-items:center; justify-content:center; font-size:18px; border:1px solid {COLORS['border']};">🖼️</div>'''
+                    thumb_url = row.get('thumbnail_url') if has_thumbnails and 'thumbnail_url' in row.index else None
+                    if thumb_url and pd.notna(thumb_url):
+                        thumb_html = f'<img src="{thumb_url}" style="width:44px; height:44px; object-fit:cover; border-radius:6px; margin-right:10px; border:1px solid {COLORS["border"]};" onerror="this.style.display=\'none\'"/>'
+                    else:
+                        thumb_html = ""
                     
-                    st.markdown(f"""
-                    <div class="action-card test-card" style="padding:0.6rem 0.8rem; margin-bottom:0.4rem;">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <div style="display:flex; align-items:center;">
-                                {thumb_html}
-                                <div>
-                                    <strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{row['nom'][:35]}{'...' if len(row['nom']) > 35 else ''}</span>
-                                    <div style="font-size:0.75rem; color:{COLORS['text_secondary']};">ROAS {row['roas']:.1f} · Confiance {row['coefficient_confiance']*100:.0f}%</div>
-                                </div>
-                            </div>
-                            <div style="font-size:0.7rem; background:{COLORS['accent_blue']}; color:white; padding:2px 8px; border-radius:4px;">+50%</div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    nom_safe = escape_html(row['nom'][:35]) + ('...' if len(row['nom']) > 35 else '')
+                    
+                    card_html = f'''<div class="action-card test-card" style="padding:0.6rem 0.8rem; margin-bottom:0.4rem;">
+<div style="display:flex; justify-content:space-between; align-items:center;">
+<div style="display:flex; align-items:center;">
+{thumb_html}<div>
+<strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{nom_safe}</span>
+<div style="font-size:0.75rem; color:{COLORS['text_secondary']};">ROAS {row['roas']:.1f} · Confiance {row['coefficient_confiance']*100:.0f}%</div>
+</div>
+</div>
+<div style="font-size:0.7rem; background:{COLORS['accent_blue']}; color:white; padding:2px 8px; border-radius:4px;">+50%</div>
+</div>
+</div>'''
+                    st.markdown(card_html, unsafe_allow_html=True)
                 if len(test_df) > 4:
                     st.caption(f"... et {len(test_df) - 4} autre(s)")
             else:
@@ -2211,21 +2238,23 @@ def main():
                         trend_badge = f"<span class='badge badge-down'>{row['trend_score']:.0f}%</span>"
                     
                     # Thumbnail
-                    thumb_html = ""
-                    if has_thumbnails and pd.notna(row.get('thumbnail_url')):
-                        thumb_html = f'''<img src="{row['thumbnail_url']}" style="width:36px; height:36px; object-fit:cover; border-radius:6px; margin-right:8px; border:1px solid {COLORS['border']};" onerror="this.style.display='none'"/>'''
+                    thumb_url = row.get('thumbnail_url') if has_thumbnails and 'thumbnail_url' in row.index else None
+                    if thumb_url and pd.notna(thumb_url):
+                        thumb_html = f'<img src="{thumb_url}" style="width:36px; height:36px; object-fit:cover; border-radius:6px; margin-right:8px; border:1px solid {COLORS["border"]};" onerror="this.style.display=\'none\'"/>'
+                    else:
+                        thumb_html = ""
                     
-                    st.markdown(f"""
-                    <div class="action-card pause-card" style="padding:0.5rem 0.8rem; margin-bottom:0.3rem;">
-                        <div style="display:flex; align-items:center;">
-                            {thumb_html}
-                            <div>
-                                <strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{row['nom'][:30]}...</span> {trend_badge}
-                                <div style="font-size:0.7rem; color:{COLORS['text_secondary']};">Freq. {row['frequency']:.2f}</div>
-                            </div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    nom_safe = escape_html(row['nom'][:30]) + '...'
+                    
+                    card_html = f'''<div class="action-card pause-card" style="padding:0.5rem 0.8rem; margin-bottom:0.3rem;">
+<div style="display:flex; align-items:center;">
+{thumb_html}<div>
+<strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{nom_safe}</span> {trend_badge}
+<div style="font-size:0.7rem; color:{COLORS['text_secondary']};">Freq. {row['frequency']:.2f}</div>
+</div>
+</div>
+</div>'''
+                    st.markdown(card_html, unsafe_allow_html=True)
                 if len(pause_df) > 3:
                     st.caption(f"... et {len(pause_df) - 3} autre(s)")
             else:
