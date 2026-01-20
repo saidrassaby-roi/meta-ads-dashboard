@@ -3081,46 +3081,6 @@ def main():
                 icons = {'A': '🟢', 'B': '🟢', 'C': '🟡', 'D': '🟠', 'F': '🔴'}
                 return f"{icons.get(grade, '⚪')} {grade} ({score})"
             
-            def format_score_with_bar(score):
-                """Formate un score avec emoji coloré et barre visuelle."""
-                if pd.isna(score) or score == 0:
-                    return "➖ 0"
-                
-                # Déterminer la couleur selon les seuils
-                if score >= 70:
-                    emoji = "🟢"
-                    bar_char = "█"
-                elif score >= 55:
-                    emoji = "🟡"
-                    bar_char = "█"
-                elif score >= 40:
-                    emoji = "🟠"
-                    bar_char = "█"
-                else:
-                    emoji = "🔴"
-                    bar_char = "█"
-                
-                # Créer la barre (10 segments pour 100)
-                filled = int(score / 10)
-                empty = 10 - filled
-                bar = bar_char * filled + "░" * empty
-                
-                return f"{emoji} {bar} {score:.0f}"
-            
-            def format_score_compact(score):
-                """Formate un score avec emoji coloré seulement (compact)."""
-                if pd.isna(score) or score == 0:
-                    return "➖ 0"
-                
-                if score >= 70:
-                    return f"🟢 {score:.0f}"
-                elif score >= 55:
-                    return f"🟡 {score:.0f}"
-                elif score >= 40:
-                    return f"🟠 {score:.0f}"
-                else:
-                    return f"🔴 {score:.0f}"
-            
             def format_trend_simple(value):
                 if pd.isna(value) or value == 0:
                     return "➖ 0%"
@@ -3177,10 +3137,27 @@ def main():
                                 final_data[col_name] = display_df[col_key].apply(format_grade_simple)
                                 column_config[col_name] = st.column_config.TextColumn("Score", width=85)
                             elif col_name in ["Score Profit", "Score Trafic", "Score Notoriété"]:
-                                # Barres colorées pour les sous-scores
-                                final_data[col_name] = display_df[col_key].apply(format_score_with_bar)
+                                # Barre native ProgressColumn
                                 short_name = col_name.replace("Score ", "")
-                                column_config[col_name] = st.column_config.TextColumn(short_name, width=140)
+                                final_data[col_name] = display_df[col_key]
+                                column_config[col_name] = st.column_config.ProgressColumn(
+                                    short_name, format="%d", min_value=0, max_value=100, width=100
+                                )
+                                # Colonne emoji adjacente pour le niveau
+                                emoji_col = f"lvl_{short_name}"
+                                def get_score_emoji(x):
+                                    if pd.isna(x) or x == 0:
+                                        return "⚪"
+                                    elif x >= 70:
+                                        return "🟢"
+                                    elif x >= 55:
+                                        return "🟡"
+                                    elif x >= 40:
+                                        return "🟠"
+                                    else:
+                                        return "🔴"
+                                final_data[emoji_col] = display_df[col_key].apply(get_score_emoji)
+                                column_config[emoji_col] = st.column_config.TextColumn("", width=35)
                             elif col_name == "Potentiel":
                                 final_data[col_name] = display_df[col_key]
                                 column_config[col_name] = st.column_config.ProgressColumn("Pot.", format="%d", min_value=0, max_value=100, width=80)
@@ -3236,6 +3213,26 @@ def main():
             
             if len(final_data) > 0:
                 final_df = pd.DataFrame(final_data)
+                
+                # Réorganiser les colonnes pour que les emojis de niveau soient juste après les barres
+                ordered_cols = []
+                for col in final_df.columns:
+                    if col.startswith('lvl_'):
+                        continue  # On les ajoutera après leur score parent
+                    ordered_cols.append(col)
+                    # Vérifier si c'est un score qui a une colonne emoji
+                    if col in ["Score Profit", "Score Trafic", "Score Notoriété"]:
+                        short_name = col.replace("Score ", "")
+                        emoji_col = f"lvl_{short_name}"
+                        if emoji_col in final_df.columns:
+                            ordered_cols.append(emoji_col)
+                
+                # Ajouter les colonnes lvl_ orphelines (au cas où)
+                for col in final_df.columns:
+                    if col.startswith('lvl_') and col not in ordered_cols:
+                        ordered_cols.append(col)
+                
+                final_df = final_df[ordered_cols]
                 
                 # Hauteur dynamique
                 table_height = min(550, max(300, 50 + len(final_df) * 40))
@@ -3342,29 +3339,6 @@ def main():
                         color = "🟢" if value >= high else "🟡" if value >= mid else "🟠" if value >= low else "🔴"
                     return f"{color} {value:.{decimals}f}{suffix}" if decimals > 0 else f"{color} {value:,.0f}{suffix}"
                 
-                def format_score_color_bar(score):
-                    """Score avec barre visuelle colorée."""
-                    if pd.isna(score) or score == 0:
-                        return "➖ 0"
-                    
-                    # Déterminer la couleur selon les seuils fixes
-                    if score >= 70:
-                        emoji = "🟢"
-                    elif score >= 55:
-                        emoji = "🟡"
-                    elif score >= 40:
-                        emoji = "🟠"
-                    else:
-                        emoji = "🔴"
-                    
-                    # Créer la barre (10 segments)
-                    filled = int(score / 10)
-                    empty = 10 - filled
-                    bar = "█" * filled + "░" * empty
-                    
-                    grade = get_grade(score)
-                    return f"{emoji} {bar} {score:.0f} ({grade})"
-                
                 # Quartiles
                 roas_q25, roas_q50, roas_q75 = filtered_df['roas'].quantile([0.25, 0.5, 0.75])
                 ctr_q25, ctr_q50, ctr_q75 = filtered_df['ctr_lien'].quantile([0.25, 0.5, 0.75])
@@ -3389,10 +3363,15 @@ def main():
                     profit_df['CVR'] = profit_df['cvr'].apply(lambda x: format_metric_color(x, (cvr_q25, cvr_q50, cvr_q75), inverse=False, suffix="%", decimals=2))
                     profit_df['Panier'] = profit_df['panier_moyen'].apply(lambda x: format_metric_color(x, (panier_q25, panier_q50, panier_q75), inverse=False, suffix="€", decimals=0))
                     profit_df['Profit €'] = profit_df.apply(lambda r: f"{'✅' if r['is_profitable'] else '❌'} {r['profit_estime']:+,.0f}€", axis=1)
-                    profit_df['Score'] = profit_df['score_profitabilite'].apply(format_score_color_bar)
+                    # Barre native + emoji
+                    profit_df['Score'] = profit_df['score_profitabilite']
+                    profit_df['Lvl'] = profit_df['score_profitabilite'].apply(lambda x: "🟢" if x >= 70 else "🟡" if x >= 55 else "🟠" if x >= 40 else "🔴" if x > 0 else "⚪")
                     
-                    display_cols = ['format', 'nom', 'ROAS', 'CPA', 'CVR', 'Panier', 'Profit €', 'achats', 'Score']
-                    col_config = {'Score': st.column_config.TextColumn("Score", width=160)}
+                    display_cols = ['format', 'nom', 'ROAS', 'CPA', 'CVR', 'Panier', 'Profit €', 'achats', 'Score', 'Lvl']
+                    col_config = {
+                        'Score': st.column_config.ProgressColumn("Score", format="%d", min_value=0, max_value=100, width=100),
+                        'Lvl': st.column_config.TextColumn("", width=35)
+                    }
                     if has_thumbnails:
                         profit_df.rename(columns={'thumbnail_url': 'Thumb'}, inplace=True)
                         display_cols.insert(0, 'Thumb')
@@ -3411,10 +3390,15 @@ def main():
                     trafic_df['CTR'] = trafic_df['ctr_lien'].apply(lambda x: format_metric_color(x, (ctr_q25, ctr_q50, ctr_q75), inverse=False, suffix="%", decimals=2))
                     trafic_df['CPC'] = trafic_df['cpc_lien'].apply(lambda x: format_metric_color(x, (cpc_q25, cpc_q50, cpc_q75), inverse=True, suffix="€", decimals=2))
                     trafic_df['Clics'] = trafic_df['clics_lien'].apply(lambda x: format_metric_color(x, (clics_q25, clics_q50, clics_q75), inverse=False, decimals=0))
-                    trafic_df['Score'] = trafic_df['score_trafic'].apply(format_score_color_bar)
+                    # Barre native + emoji
+                    trafic_df['Score'] = trafic_df['score_trafic']
+                    trafic_df['Lvl'] = trafic_df['score_trafic'].apply(lambda x: "🟢" if x >= 70 else "🟡" if x >= 55 else "🟠" if x >= 40 else "🔴" if x > 0 else "⚪")
                     
-                    display_cols = ['format', 'nom', 'CTR', 'CPC', 'Clics', 'Score']
-                    col_config = {'Score': st.column_config.TextColumn("Score", width=160)}
+                    display_cols = ['format', 'nom', 'CTR', 'CPC', 'Clics', 'Score', 'Lvl']
+                    col_config = {
+                        'Score': st.column_config.ProgressColumn("Score", format="%d", min_value=0, max_value=100, width=100),
+                        'Lvl': st.column_config.TextColumn("", width=35)
+                    }
                     if has_thumbnails:
                         trafic_df.rename(columns={'thumbnail_url': 'Thumb'}, inplace=True)
                         display_cols.insert(0, 'Thumb')
@@ -3430,10 +3414,15 @@ def main():
                     notoriete_df['CPMu'] = notoriete_df['cpmu'].apply(lambda x: format_metric_color(x, (cpmu_q25, cpmu_q50, cpmu_q75), inverse=True, suffix="€", decimals=2))
                     notoriete_df['CPM'] = notoriete_df['cpm'].apply(lambda x: format_metric_color(x, (cpm_q25, cpm_q50, cpm_q75), inverse=True, suffix="€", decimals=2))
                     notoriete_df['Reach'] = notoriete_df['reach'].apply(lambda x: format_metric_color(x, (reach_q25, reach_q50, reach_q75), inverse=False, decimals=0))
-                    notoriete_df['Score'] = notoriete_df['score_notoriete'].apply(format_score_color_bar)
+                    # Barre native + emoji
+                    notoriete_df['Score'] = notoriete_df['score_notoriete']
+                    notoriete_df['Lvl'] = notoriete_df['score_notoriete'].apply(lambda x: "🟢" if x >= 70 else "🟡" if x >= 55 else "🟠" if x >= 40 else "🔴" if x > 0 else "⚪")
                     
-                    display_cols = ['format', 'nom', 'CPMu', 'CPM', 'Reach', 'Score']
-                    col_config = {'Score': st.column_config.TextColumn("Score", width=160)}
+                    display_cols = ['format', 'nom', 'CPMu', 'CPM', 'Reach', 'Score', 'Lvl']
+                    col_config = {
+                        'Score': st.column_config.ProgressColumn("Score", format="%d", min_value=0, max_value=100, width=100),
+                        'Lvl': st.column_config.TextColumn("", width=35)
+                    }
                     if has_thumbnails:
                         notoriete_df.rename(columns={'thumbnail_url': 'Thumb'}, inplace=True)
                         display_cols.insert(0, 'Thumb')
