@@ -1,17 +1,11 @@
 """
-Meta Ads Creative Intelligence Dashboard V2.6
+Meta Ads Creative Intelligence Dashboard V2.5
 =============================================
 Application de pilotage des créatives publicitaires Meta Ads.
 Tableau avec composants natifs Streamlit pour un affichage fiable.
 
 Auteur: Le ROI Digital
-Version: 2.6 - Intégration API Meta pour thumbnails
-
-Changelog V2.6:
-- Intégration API Meta Ads pour récupérer les thumbnails des créatives
-- Affichage des miniatures dans les cards et tableaux
-- Cache des thumbnails pour optimiser les performances
-- Configuration API dans la sidebar (Token + Ad Account ID)
+Version: 2.5 - Nomenclature personnalisée
 
 Changelog V2.5:
 - Score Profitabilité V2 avec Panier moyen (20%)
@@ -36,7 +30,6 @@ from datetime import datetime, timedelta
 import plotly.express as px
 import plotly.graph_objects as go
 import re
-import requests
 
 # Configuration de la page
 st.set_page_config(
@@ -49,10 +42,6 @@ st.set_page_config(
 # Initialiser le mode sombre dans session_state (toujours activé maintenant)
 if 'dark_mode' not in st.session_state:
     st.session_state.dark_mode = True
-
-# Initialiser le cache des thumbnails
-if 'thumbnail_cache' not in st.session_state:
-    st.session_state.thumbnail_cache = {}
 
 # ============================================================================
 # THÈME VISUEL GA4 STYLE
@@ -632,213 +621,19 @@ def render_kpi_card(label, value, subtitle="", highlight=False):
 
 
 # ============================================================================
-# API META ADS - FONCTIONS THUMBNAILS
-# ============================================================================
-
-def test_api_connection(access_token, ad_account_id):
-    """
-    Teste la connexion à l'API Meta Ads.
-    
-    Returns:
-        tuple: (success: bool, message: str)
-    """
-    try:
-        url = f"https://graph.facebook.com/v19.0/{ad_account_id}"
-        params = {
-            'access_token': access_token,
-            'fields': 'name,account_id'
-        }
-        response = requests.get(url, params=params, timeout=10)
-        
-        if response.status_code == 200:
-            data = response.json()
-            account_name = data.get('name', 'Compte')
-            return True, f"✅ Connecté à : {account_name}"
-        else:
-            error = response.json().get('error', {}).get('message', 'Erreur inconnue')
-            return False, f"❌ Erreur : {error}"
-    except requests.exceptions.Timeout:
-        return False, "❌ Timeout - Vérifiez votre connexion"
-    except Exception as e:
-        return False, f"❌ Erreur : {str(e)}"
-
-
-def fetch_thumbnails_batch(access_token, ad_account_id, ad_ids, batch_size=50):
-    """
-    Récupère les thumbnails pour une liste d'Ad IDs en batch.
-    
-    Args:
-        access_token: Token d'accès Meta API
-        ad_account_id: ID du compte publicitaire (format act_XXXXX)
-        ad_ids: Liste des Ad IDs à récupérer
-        batch_size: Nombre d'ads par requête (max 50 recommandé)
-    
-    Returns:
-        dict: {ad_id: thumbnail_url}
-    """
-    thumbnails = {}
-    
-    # Filtrer les IDs déjà en cache
-    ids_to_fetch = [aid for aid in ad_ids if aid and str(aid) not in st.session_state.thumbnail_cache]
-    
-    if not ids_to_fetch:
-        return thumbnails
-    
-    # Traiter par batch
-    for i in range(0, len(ids_to_fetch), batch_size):
-        batch_ids = ids_to_fetch[i:i + batch_size]
-        
-        try:
-            # Requête pour récupérer les thumbnails
-            url = f"https://graph.facebook.com/v19.0/"
-            params = {
-                'access_token': access_token,
-                'ids': ','.join(str(aid) for aid in batch_ids),
-                'fields': 'id,name,creative{thumbnail_url,image_url}'
-            }
-            
-            response = requests.get(url, params=params, timeout=30)
-            
-            if response.status_code == 200:
-                data = response.json()
-                
-                for ad_id, ad_data in data.items():
-                    creative = ad_data.get('creative', {})
-                    # Priorité : thumbnail_url > image_url
-                    thumb_url = creative.get('thumbnail_url') or creative.get('image_url')
-                    
-                    if thumb_url:
-                        thumbnails[str(ad_id)] = thumb_url
-                        st.session_state.thumbnail_cache[str(ad_id)] = thumb_url
-                    else:
-                        # Marquer comme non disponible pour éviter de re-requêter
-                        st.session_state.thumbnail_cache[str(ad_id)] = None
-                        
-        except Exception as e:
-            st.warning(f"⚠️ Erreur batch thumbnails : {str(e)}")
-            continue
-    
-    return thumbnails
-
-
-def get_thumbnail_url(ad_id):
-    """
-    Récupère l'URL du thumbnail depuis le cache.
-    
-    Args:
-        ad_id: ID de la publicité
-    
-    Returns:
-        str or None: URL du thumbnail ou None si non disponible
-    """
-    if not ad_id:
-        return None
-    return st.session_state.thumbnail_cache.get(str(ad_id))
-
-
-def render_thumbnail_html(thumbnail_url, size=40, fallback_icon="🖼️"):
-    """
-    Génère le HTML pour afficher un thumbnail.
-    
-    Args:
-        thumbnail_url: URL de l'image ou None
-        size: Taille en pixels
-        fallback_icon: Emoji à afficher si pas d'image
-    
-    Returns:
-        str: HTML de l'image ou du fallback
-    """
-    if thumbnail_url:
-        return f'''
-        <img src="{thumbnail_url}" 
-             style="width:{size}px; height:{size}px; object-fit:cover; border-radius:6px; border:1px solid {COLORS['border']};"
-             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
-        />
-        <div style="display:none; width:{size}px; height:{size}px; background:{COLORS['bg_tertiary']}; 
-                    border-radius:6px; align-items:center; justify-content:center; font-size:{size//2}px;">
-            {fallback_icon}
-        </div>
-        '''
-    else:
-        return f'''
-        <div style="width:{size}px; height:{size}px; background:{COLORS['bg_tertiary']}; 
-                    border-radius:6px; display:flex; align-items:center; justify-content:center; 
-                    font-size:{size//2}px; border:1px solid {COLORS['border']};">
-            {fallback_icon}
-        </div>
-        '''
-
-
-# ============================================================================
 # FONCTIONS DE TRAITEMENT
 # ============================================================================
 
-def escape_html(text):
-    """Échappe les caractères HTML pour un affichage sûr."""
-    if not isinstance(text, str):
-        return str(text)
-    return (text
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace('"', "&quot;")
-            .replace("'", "&#39;"))
-
-
-def normalize_text(text):
-    """Normalise un texte pour la comparaison (minuscules, sans accents)."""
-    import unicodedata
-    # Normaliser et enlever les accents
-    normalized = unicodedata.normalize('NFKD', str(text))
-    ascii_text = normalized.encode('ASCII', 'ignore').decode('ASCII')
-    return ascii_text.lower().strip()
-
-
 def find_column(df, possible_names):
     """Trouve une colonne parmi plusieurs noms possibles."""
-    # D'abord essayer une correspondance exacte
     for name in possible_names:
         if name in df.columns:
             return name
-    
-    # Ensuite essayer avec normalisation (case insensitive)
-    for name in possible_names:
-        norm_name = normalize_text(name)
         for col in df.columns:
-            norm_col = normalize_text(col)
-            # Correspondance exacte normalisée
-            if norm_col == norm_name:
+            if col.lower() == name.lower():
                 return col
-    
-    # Correspondance partielle
-    for name in possible_names:
-        norm_name = normalize_text(name)
-        for col in df.columns:
-            norm_col = normalize_text(col)
-            if norm_name in norm_col or norm_col in norm_name:
+            if name.lower() in col.lower():
                 return col
-    
-    return None
-
-
-def find_ad_id_column(df):
-    """Trouve spécifiquement la colonne contenant l'ID de publicité."""
-    for col in df.columns:
-        col_lower = col.lower()
-        col_normalized = normalize_text(col)
-        
-        # Chercher les patterns d'ID de publicité
-        # Pattern 1: Contient "publicité" ou "publicite" ET un indicateur d'ID
-        is_pub_col = 'publicite' in col_normalized or 'publicité' in col_lower
-        has_id_indicator = any(x in col_lower for x in ['n°', 'nº', 'id', 'numéro', 'numero'])
-        
-        if is_pub_col and has_id_indicator:
-            return col
-        
-        # Pattern 2: Nom exact connu
-        if col_normalized in ['n de la publicite', 'id de la publicite', 'ad id']:
-            return col
-    
     return None
 
 
@@ -846,13 +641,13 @@ def standardize_columns(df):
     """Standardise les noms de colonnes du CSV Meta Ads."""
     
     column_mappings = {
-        'nom': ['Nom de la publicité', 'Ad name', 'nom_publicite', 'nom', 'Nom de la pub', 'Nom publicité', 'nom de la publicite'],
+        'nom': ['Nom de la publicité', 'Ad name', 'nom_publicite', 'nom', 'Nom de la pub'],
         'campagne': ['Nom de la campagne', 'Campaign name', 'campagne', 'nom_campagne'],
-        'audience': ['Nom de l\'ensemble de publicités', 'Ad set name', 'audience', 'nom_adset', 'adset', 'Nom de l\'ensemble de publicites'],
-        'impressions': ['Impressions', 'impressions', 'Impression', 'impression', 'impr'],
-        'reach': ['Couverture', 'Reach', 'reach', 'couverture', 'Portée', 'portee'],
-        'clics_lien': ['Clics sur un lien', 'Link clicks', 'clics_lien', 'Clics sur le lien', 'Clics (lien)', 'clics sur lien'],
-        'clics_tous': ['Clics (tous)', 'Clicks (all)', 'clics_tous', 'Clics'],
+        'audience': ['Nom de l\'ensemble de publicités', 'Ad set name', 'audience', 'nom_adset', 'adset'],
+        'impressions': ['Impressions', 'impressions'],
+        'reach': ['Couverture', 'Reach', 'reach', 'couverture'],
+        'clics_lien': ['Clics sur un lien', 'Link clicks', 'clics_lien', 'Clics sur le lien'],
+        'clics_tous': ['Clics (tous)', 'Clicks (all)', 'clics_tous'],
         'ctr_lien': ['CTR unique (taux de clics sur le lien)', 'CTR (taux de clics sur le lien)', 
                      'Link click-through rate', 'ctr_lien', 'CTR (lien)', 'ctr_unique_lien'],
         'ctr_tous': ['CTR (tous)', 'CTR (all)', 'ctr_tous'],
@@ -871,9 +666,9 @@ def standardize_columns(df):
         'cpa': ['Coût par résultat', 'Cost per result', 'cpa', 'cout_par_resultat'],
         'frequency': ['Répétition', 'Frequency', 'frequency', 'frequence'],
         'ajouts_panier': ['Ajouts au panier', 'Adds to cart', 'ajouts_panier'],
+        'leads': ['Prospects', 'Leads', 'leads', 'Résultats', 'Results', 'Conversions'],
         'date_debut': ['Début des rapports', 'Reporting starts', 'date_debut'],
         'date_fin': ['Fin des rapports', 'Reporting ends', 'date_fin'],
-        'ad_id': ['ID de la publicité', 'Ad ID', 'ad_id', 'ID publicité', 'id_publicite', 'Nº de la publicité', 'N° de la publicité', 'Numéro de la publicité'],
     }
     
     rename_dict = {}
@@ -883,12 +678,6 @@ def standardize_columns(df):
             rename_dict[found_col] = standard_name
     
     df = df.rename(columns=rename_dict)
-    
-    # Recherche spécifique pour ad_id si pas trouvé
-    if 'ad_id' not in df.columns:
-        ad_id_col = find_ad_id_column(df)
-        if ad_id_col:
-            df = df.rename(columns={ad_id_col: 'ad_id'})
     
     # Ajouter colonnes par défaut si absentes
     if 'campagne' not in df.columns:
@@ -922,21 +711,9 @@ def load_and_process_data(uploaded_file):
     df = pd.read_csv(uploaded_file)
     df = standardize_columns(df)
     
-    # Vérifier les colonnes essentielles
-    required_cols = ['impressions', 'nom']
-    missing_cols = [col for col in required_cols if col not in df.columns]
-    
-    if missing_cols:
-        available_cols = ", ".join(df.columns.tolist()[:20]) + ("..." if len(df.columns) > 20 else "")
-        raise ValueError(f"Colonnes manquantes: {missing_cols}. Colonnes disponibles: {available_cols}")
-    
-    # Ajouter reach par défaut si absent (= impressions)
-    if 'reach' not in df.columns:
-        df['reach'] = df['impressions']
-    
     numeric_cols = ['impressions', 'reach', 'clics_lien', 'clics_tous', 'ctr_lien', 'ctr_tous',
                     'cpc_lien', 'cpc_tous', 'cpm', 'depense', 'achats', 'valeur_achats', 'roas', 
-                    'cpa', 'frequency', 'ajouts_panier']
+                    'cpa', 'frequency', 'ajouts_panier', 'leads']
     
     for col in numeric_cols:
         if col in df.columns:
@@ -944,7 +721,8 @@ def load_and_process_data(uploaded_file):
     
     default_cols = {
         'valeur_achats': 0, 'achats': 0, 'roas': 0, 'ajouts_panier': 0, 'cpa': 0,
-        'cpm': 0, 'cpc_lien': 0, 'ctr_lien': 0, 'clics_lien': 0, 'frequency': 1
+        'cpm': 0, 'cpc_lien': 0, 'ctr_lien': 0, 'clics_lien': 0, 'frequency': 1,
+        'leads': 0
     }
     
     for col, default in default_cols.items():
@@ -979,16 +757,8 @@ def load_daily_data(uploaded_file):
         if col in df.columns:
             df[col] = df[col].apply(clean_numeric)
     
-    # Chercher la colonne date avec plusieurs variantes
-    date_col = None
-    date_variants = ['date_debut', 'Début des rapports', 'Date', 'date', 'Jour', 'jour', 'Day', 'day', 'Reporting starts']
-    for variant in date_variants:
-        if variant in df.columns:
-            date_col = variant
-            break
-    
-    if date_col:
-        df['date'] = pd.to_datetime(df[date_col], dayfirst=True, errors='coerce')
+    if 'date_debut' in df.columns:
+        df['date'] = pd.to_datetime(df['date_debut'], dayfirst=True, errors='coerce')
     
     return df
 
@@ -1257,20 +1027,27 @@ def get_grade(score):
     else: return 'F'
 
 
-def calculate_scores(df, trends=None, marge_moyenne=40):
+def calculate_scores(df, trends=None, marge_moyenne=40, business_mode='ecommerce', cpl_cible=15):
     """Calcule les scores pour chaque créative.
     
-    Score Profitabilité V2:
+    Score Profitabilité E-commerce V2:
     - ROAS: 40%
     - CPA inversé: 25%
     - CVR: 15%
     - Panier moyen: 20%
+    
+    Score Profitabilité Lead Gen V1:
+    - CPL ratio (vs cible): 50%
+    - CVR landing page: 30%
+    - Volume leads: 20%
     """
     
     df = df[df['impressions'] >= 500].copy()
     
     if len(df) == 0:
         return df
+    
+    is_leadgen = (business_mode == 'leadgen')
     
     def calc_stats(values):
         valid = values[values > 0]
@@ -1287,15 +1064,39 @@ def calculate_scores(df, trends=None, marge_moyenne=40):
     # Calculer le CPMu (Cost Per Mille Unique)
     df['cpmu'] = np.where(df['reach'] > 0, (df['depense'] / df['reach']) * 1000, 0)
     
-    # Calculer le panier moyen (AOV)
-    df['panier_moyen'] = np.where(df['achats'] > 0, df['valeur_achats'] / df['achats'], 0)
-    
-    # Calculer le profit estimé
-    marge_ratio = marge_moyenne / 100
-    df['profit_estime'] = (df['valeur_achats'] * marge_ratio) - df['depense']
-    df['profit_ratio'] = np.where(df['depense'] > 0, (df['profit_estime'] / df['depense']) * 100, 0)
-    df['is_profitable'] = df['profit_estime'] > 0
-    df['roas_seuil'] = round(1 / marge_ratio, 2)
+    # === Métriques Lead Gen ===
+    if is_leadgen:
+        # Si pas de colonne leads, fallback sur achats
+        if 'leads' not in df.columns or df['leads'].sum() == 0:
+            df['leads'] = df['achats']
+        # En lead gen, utiliser leads pour le coefficient de confiance (via achats)
+        if df['achats'].sum() == 0 and df['leads'].sum() > 0:
+            df['achats'] = df['leads']
+        df['cpl'] = np.where(df['leads'] > 0, df['depense'] / df['leads'], 0)
+        df['cvr_lp'] = np.where(df['clics_lien'] > 0, (df['leads'] / df['clics_lien']) * 100, 0)
+        
+        # Métriques de rentabilité lead gen
+        df['is_profitable'] = np.where(df['cpl'] > 0, df['cpl'] <= cpl_cible, False)
+        df['profit_estime'] = np.where(df['leads'] > 0, (cpl_cible - df['cpl']) * df['leads'], 0)
+        df['profit_ratio'] = np.where(df['depense'] > 0, (df['profit_estime'] / df['depense']) * 100, 0)
+        df['roas_seuil'] = 0  # Non applicable en lead gen
+        df['panier_moyen'] = 0  # Non applicable en lead gen
+        
+        cpl_mean, cpl_std = calc_stats(df['cpl'])
+        cvr_lp_mean, cvr_lp_std = calc_stats(df['cvr_lp'])
+        leads_mean, leads_std = calc_stats(df['leads'])
+    else:
+        # === Métriques E-commerce ===
+        df['panier_moyen'] = np.where(df['achats'] > 0, df['valeur_achats'] / df['achats'], 0)
+        marge_ratio = marge_moyenne / 100
+        df['profit_estime'] = (df['valeur_achats'] * marge_ratio) - df['depense']
+        df['profit_ratio'] = np.where(df['depense'] > 0, (df['profit_estime'] / df['depense']) * 100, 0)
+        df['is_profitable'] = df['profit_estime'] > 0
+        df['roas_seuil'] = round(1 / marge_ratio, 2)
+        # Initialiser colonnes lead gen à 0 pour éviter les KeyError
+        df['leads'] = df.get('leads', 0)
+        df['cpl'] = 0
+        df['cvr_lp'] = 0
     
     roas_mean, roas_std = calc_stats(df['roas'])
     ctr_mean, ctr_std = calc_stats(df['ctr_lien'])
@@ -1330,8 +1131,35 @@ def calculate_scores(df, trends=None, marge_moyenne=40):
         def z_to_100(z):
             return max(0, min(100, 50 + z * 10))
         
-        # Score Profitabilité V2: ROAS 40% + CPA 25% + CVR 15% + Panier 20%
-        score_profit = round(z_to_100(0.40 * z_roas + 0.25 * z_cpa + 0.15 * z_cvr + 0.20 * z_panier))
+        if is_leadgen:
+            # === Score Profitabilité Lead Gen V1 ===
+            # CPL inversé (plus bas = meilleur) : 50%
+            cpl_val = row['cpl']
+            if cpl_val > 0:
+                cpl_ratio = cpl_cible / cpl_val
+                cpl_score_component = min(100, cpl_ratio * 50)
+            else:
+                cpl_score_component = 0
+            
+            # CVR landing page : 30%
+            z_cvr_lp = z_score(row['cvr_lp'], cvr_lp_mean, cvr_lp_std)
+            cvr_lp_score_component = z_to_100(z_cvr_lp)
+            
+            # Volume de leads : 20%
+            z_leads = z_score(row['leads'], leads_mean, leads_std)
+            volume_score_component = z_to_100(z_leads)
+            
+            score_profit = round(
+                cpl_score_component * 0.50 +
+                cvr_lp_score_component * 0.30 +
+                volume_score_component * 0.20
+            )
+            score_profit = max(0, min(100, score_profit))
+        else:
+            # === Score Profitabilité E-commerce V2 ===
+            # ROAS 40% + CPA 25% + CVR 15% + Panier 20%
+            score_profit = round(z_to_100(0.40 * z_roas + 0.25 * z_cpa + 0.15 * z_cvr + 0.20 * z_panier))
+        
         score_trafic = round(z_to_100(0.50 * z_ctr + 0.30 * z_cpc + 0.20 * z_clics))
         # Nouveau calcul: CPMu inversé (50%) + Couverture (50%)
         score_notoriete = round(z_to_100(0.50 * z_cpmu + 0.50 * z_reach))
@@ -1437,9 +1265,11 @@ def generate_recommendation(row, trends=None):
         return "Stable → Maintenir"
 
 
-def detect_alerts(df, trends=None):
+def detect_alerts(df, trends=None, business_mode='ecommerce', cpl_cible=15):
     """Détecte les alertes automatiques basées sur les seuils."""
     alerts = []
+    
+    is_leadgen = (business_mode == 'leadgen')
     
     # Calculer les seuils pour CPMu
     cpmu_mean = df['cpmu'].mean() if 'cpmu' in df.columns else 0
@@ -1448,19 +1278,43 @@ def detect_alerts(df, trends=None):
     for _, row in df.iterrows():
         nom = row['nom']
         
-        # NOUVELLE ALERTE: ROAS trompeur (ROAS > 1 mais perte réelle)
-        roas = row.get('roas', 0)
-        profit_estime = row.get('profit_estime', 0)
-        if roas > 1 and profit_estime < 0:
-            alerts.append({
-                'type': 'danger',
-                'icon': '💸',
-                'title': 'ROAS trompeur',
-                'creative': nom,
-                'message': f"ROAS {roas:.2f} mais perte de {abs(profit_estime):.0f}€",
-                'action': 'Vérifier la marge ou pauser cette créative',
-                'priority': 1
-            })
+        if is_leadgen:
+            # ALERTE Lead Gen: CPL explosif (> 150% de la cible)
+            cpl = row.get('cpl', 0)
+            if cpl > 0 and cpl > cpl_cible * 1.5:
+                alerts.append({
+                    'type': 'danger',
+                    'icon': '💸',
+                    'title': 'CPL critique',
+                    'creative': nom,
+                    'message': f"CPL {cpl:.2f}€ vs cible {cpl_cible:.0f}€ (+{((cpl/cpl_cible)-1)*100:.0f}%)",
+                    'action': 'Pauser ou revoir le ciblage',
+                    'priority': 1
+                })
+            elif cpl > 0 and cpl > cpl_cible * 1.2:
+                alerts.append({
+                    'type': 'warning',
+                    'icon': '🟠',
+                    'title': 'CPL élevé',
+                    'creative': nom,
+                    'message': f"CPL {cpl:.2f}€ vs cible {cpl_cible:.0f}€ (+{((cpl/cpl_cible)-1)*100:.0f}%)",
+                    'action': 'Surveiller, optimiser la landing page',
+                    'priority': 2
+                })
+        else:
+            # ALERTE E-commerce: ROAS trompeur (ROAS > 1 mais perte réelle)
+            roas = row.get('roas', 0)
+            profit_estime = row.get('profit_estime', 0)
+            if roas > 1 and profit_estime < 0:
+                alerts.append({
+                    'type': 'danger',
+                    'icon': '💸',
+                    'title': 'ROAS trompeur',
+                    'creative': nom,
+                    'message': f"ROAS {roas:.2f} mais perte de {abs(profit_estime):.0f}€",
+                    'action': 'Vérifier la marge ou pauser cette créative',
+                    'priority': 1
+                })
         
         # Alerte Frequency > 3
         if row.get('frequency', 0) > 3:
@@ -1841,105 +1695,55 @@ def main():
         st.divider()
         st.header("⚙️ Paramètres")
         min_impressions = st.slider("Impressions minimum", 0, 10000, 500, 100)
-        min_depense = st.slider(
-            "Dépense minimum (€)", 
-            min_value=0, 
-            max_value=500, 
-            value=0, 
-            step=5,
-            help="Filtre les créatives avec une dépense >= à ce seuil. Les scores sont recalculés uniquement sur les créatives filtrées."
-        )
         
         st.divider()
-        st.subheader("💵 Rentabilité")
-        marge_moyenne = st.slider(
-            "Marge moyenne (%)",
-            min_value=10,
-            max_value=80,
-            value=40,
-            step=1,
-            help="Votre marge brute moyenne sur les produits vendus. Utilisé pour calculer le profit estimé et le ROAS seuil."
+        st.subheader("🏢 Mode business")
+        business_mode = st.radio(
+            "Type de compte",
+            ["🛒 E-commerce", "📋 Génération de leads"],
+            help="Choisissez le mode adapté à votre objectif. Cela change le calcul du score de profitabilité."
         )
-        
-        # Calculer et afficher le ROAS seuil
-        roas_seuil = round(1 / (marge_moyenne / 100), 2)
-        st.info(f"📊 **ROAS seuil**: {roas_seuil}  \nMinimum pour être rentable avec {marge_moyenne}% de marge")
+        is_leadgen = business_mode == "📋 Génération de leads"
         
         st.divider()
-        
-        # ===== SECTION API META POUR THUMBNAILS =====
-        st.subheader("🖼️ Thumbnails (API Meta)")
-        
-        with st.expander("Configuration API", expanded=False):
-            st.caption("Connectez l'API Meta pour afficher les miniatures des créatives.")
-            
-            # Initialiser les valeurs dans session_state si pas présentes
-            if 'meta_access_token' not in st.session_state:
-                st.session_state.meta_access_token = ""
-            if 'meta_ad_account_id' not in st.session_state:
-                st.session_state.meta_ad_account_id = ""
-            if 'api_connected' not in st.session_state:
-                st.session_state.api_connected = False
-            
-            access_token = st.text_input(
-                "Access Token",
-                value=st.session_state.meta_access_token,
-                type="password",
-                help="Token généré depuis Graph API Explorer avec permission ads_management"
+        if not is_leadgen:
+            st.subheader("💵 Rentabilité (E-commerce)")
+            marge_moyenne = st.slider(
+                "Marge moyenne (%)",
+                min_value=10,
+                max_value=80,
+                value=40,
+                step=1,
+                help="Votre marge brute moyenne sur les produits vendus. Utilisé pour calculer le profit estimé et le ROAS seuil."
             )
             
-            ad_account_id = st.text_input(
-                "Ad Account ID",
-                value=st.session_state.meta_ad_account_id,
-                placeholder="act_123456789",
-                help="Format: act_XXXXXXXXX"
+            # Calculer et afficher le ROAS seuil
+            roas_seuil = round(1 / (marge_moyenne / 100), 2)
+            st.info(f"📊 **ROAS seuil**: {roas_seuil}  \nMinimum pour être rentable avec {marge_moyenne}% de marge")
+            cpl_cible = 0
+            cpl_excellent = 0
+        else:
+            marge_moyenne = 40  # valeur par défaut non utilisée en lead gen
+            st.subheader("📋 Rentabilité (Lead Gen)")
+            cpl_cible = st.number_input(
+                "CPL Cible (€)",
+                min_value=1.0,
+                max_value=500.0,
+                value=15.0,
+                step=1.0,
+                help="Coût Par Lead acceptable. Les créatives en dessous de ce seuil sont considérées rentables."
             )
-            
-            col_btn1, col_btn2 = st.columns(2)
-            
-            with col_btn1:
-                if st.button("🔌 Connecter", use_container_width=True):
-                    if access_token and ad_account_id:
-                        # Nettoyer l'ad account id
-                        # Retirer les préfixes courants et caractères invalides
-                        clean_id = ad_account_id.strip()
-                        clean_id = clean_id.replace('act_', '').replace('act=', '').replace('act', '')
-                        # Ne garder que les chiffres
-                        clean_id = ''.join(c for c in clean_id if c.isdigit())
-                        
-                        if clean_id:
-                            ad_account_id = f"act_{clean_id}"
-                        else:
-                            st.error("❌ Ad Account ID invalide. Entrez uniquement les chiffres.")
-                            ad_account_id = None
-                        
-                        if ad_account_id:
-                            success, message = test_api_connection(access_token, ad_account_id)
-                        
-                            if success:
-                                st.session_state.meta_access_token = access_token
-                                st.session_state.meta_ad_account_id = ad_account_id
-                                st.session_state.api_connected = True
-                                st.success(message)
-                            else:
-                                st.session_state.api_connected = False
-                                st.error(message)
-                    else:
-                        st.warning("⚠️ Remplissez les deux champs")
-            
-            with col_btn2:
-                if st.button("🗑️ Déconnecter", use_container_width=True):
-                    st.session_state.meta_access_token = ""
-                    st.session_state.meta_ad_account_id = ""
-                    st.session_state.api_connected = False
-                    st.session_state.thumbnail_cache = {}
-                    st.info("Déconnecté")
-            
-            # Status de connexion
-            if st.session_state.api_connected:
-                st.success(f"✅ API connectée · {len(st.session_state.thumbnail_cache)} thumbnails en cache")
-            else:
-                st.caption("❌ Non connecté")
+            cpl_excellent = st.number_input(
+                "CPL Excellent (€)",
+                min_value=1.0,
+                max_value=500.0,
+                value=10.0,
+                step=1.0,
+                help="CPL idéal. Les créatives sous ce seuil reçoivent un score maximal."
+            )
+            if cpl_excellent >= cpl_cible:
+                st.warning("⚠️ Le CPL Excellent devrait être inférieur au CPL Cible.")
+            st.info(f"📊 **CPL Cible**: {cpl_cible:.0f}€ · **CPL Excellent**: {cpl_excellent:.0f}€")
         
         st.divider()
         st.markdown("""
@@ -1956,10 +1760,6 @@ def main():
         df = load_and_process_data(uploaded_main)
         df = df[df['impressions'] >= min_impressions]
         
-        # Filtre dépense minimum (appliqué AVANT le calcul des scores)
-        if min_depense > 0:
-            df = df[df['depense'] >= min_depense]
-        
         if len(df) == 0:
             st.warning("⚠️ Aucune créative ne correspond aux filtres.")
             return
@@ -1971,104 +1771,26 @@ def main():
         if uploaded_daily:
             try:
                 df_daily = load_daily_data(uploaded_daily)
-                
-                # Debug: afficher les infos du fichier quotidien
-                with st.sidebar.expander("🔍 Debug données quotidiennes", expanded=False):
-                    st.write(f"**Lignes:** {len(df_daily)}")
-                    st.write(f"**Colonnes:** {list(df_daily.columns)}")
-                    if 'date' in df_daily.columns:
-                        st.write(f"**Dates:** {df_daily['date'].min()} → {df_daily['date'].max()}")
-                    else:
-                        st.warning("⚠️ Colonne 'date' non trouvée!")
-                    if 'nom' in df_daily.columns:
-                        noms_daily = set(df_daily['nom'].unique())
-                        noms_main = set(df['nom'].unique())
-                        noms_communs = noms_daily.intersection(noms_main)
-                        st.write(f"**Créatives quotidien:** {len(noms_daily)}")
-                        st.write(f"**Créatives principal:** {len(noms_main)}")
-                        st.write(f"**Noms communs:** {len(noms_communs)}")
-                        if len(noms_communs) == 0:
-                            st.error("❌ Aucun nom ne correspond entre les 2 fichiers!")
-                            st.write("**Exemple noms quotidien:**")
-                            st.code(list(noms_daily)[:3])
-                            st.write("**Exemple noms principal:**")
-                            st.code(list(noms_main)[:3])
-                    else:
-                        st.warning("⚠️ Colonne 'nom' non trouvée!")
-                
                 trends, sparklines = calculate_trends_from_daily(df_daily)
                 has_daily = len(trends) > 0
                 if has_daily:
                     st.sidebar.success(f"📈 {len(trends)} tendances calculées")
-                else:
-                    st.sidebar.warning("⚠️ 0 tendance calculée - vérifiez le debug ci-dessus")
             except Exception as e:
                 st.sidebar.warning(f"⚠️ Erreur: {str(e)}")
         
-        df = calculate_scores(df, trends, marge_moyenne)
+        biz_mode = 'leadgen' if is_leadgen else 'ecommerce'
+        df = calculate_scores(df, trends, marge_moyenne, business_mode=biz_mode, cpl_cible=cpl_cible)
         
         if len(df) == 0:
             st.warning("⚠️ Aucune créative avec assez d'impressions.")
             return
             
     except Exception as e:
-        error_msg = str(e)
-        st.error(f"❌ Erreur: {error_msg}")
-        
-        # Afficher les colonnes disponibles pour aider au debug
-        if "'impressions'" in error_msg or "'reach'" in error_msg or "'nom'" in error_msg:
-            try:
-                # Recharger le CSV pour afficher les colonnes
-                uploaded_main.seek(0)
-                df_debug = pd.read_csv(uploaded_main)
-                with st.expander("🔍 Debug: Colonnes disponibles dans le CSV", expanded=True):
-                    st.write("**Colonnes trouvées:**")
-                    st.code(", ".join(df_debug.columns.tolist()))
-                    st.write("**Colonnes requises:** impressions, reach, nom, depense")
-            except:
-                pass
+        st.error(f"❌ Erreur: {str(e)}")
         return
     
     if has_daily:
         st.success("✅ Données quotidiennes chargées - Tendances et sparklines activées")
-    
-    # Message informatif si filtre dépense actif
-    if min_depense > 0:
-        st.info(f"🎚️ **Filtre actif** : Dépense ≥ {min_depense}€ · **{len(df)}** créatives · Scores recalculés sur ce périmètre")
-    
-    # ===== RÉCUPÉRATION DES THUMBNAILS VIA API META =====
-    has_thumbnails = False
-    if st.session_state.api_connected and 'ad_id' in df.columns:
-        ad_ids = df['ad_id'].dropna().unique().tolist()
-        if ad_ids:
-            # Vérifier combien d'IDs ne sont pas en cache
-            ids_not_cached = [aid for aid in ad_ids if str(aid) not in st.session_state.thumbnail_cache]
-            
-            if ids_not_cached:
-                with st.spinner(f"🖼️ Récupération de {len(ids_not_cached)} thumbnails..."):
-                    fetch_thumbnails_batch(
-                        st.session_state.meta_access_token,
-                        st.session_state.meta_ad_account_id,
-                        ids_not_cached
-                    )
-            
-            # Ajouter les URLs de thumbnail au DataFrame
-            df['thumbnail_url'] = df['ad_id'].apply(lambda x: get_thumbnail_url(x) if pd.notna(x) else None)
-            has_thumbnails = df['thumbnail_url'].notna().any()
-            
-            if has_thumbnails:
-                nb_thumbs = df['thumbnail_url'].notna().sum()
-                st.success(f"🖼️ {nb_thumbs}/{len(df)} thumbnails chargés")
-    elif st.session_state.api_connected and 'ad_id' not in df.columns:
-        # Debug: afficher les colonnes disponibles pour aider l'utilisateur
-        all_cols = list(df.columns)
-        # Chercher les colonnes qui pourraient être l'ID
-        potential_id_cols = [c for c in all_cols if any(x in c.lower() for x in ['id', 'nº', 'n°', 'numero', 'numéro'])]
-        
-        with st.expander("⚠️ Colonne 'ID de la publicité' non trouvée - Cliquez pour voir les détails", expanded=True):
-            st.write("**Colonnes potentielles détectées:**", potential_id_cols if potential_id_cols else "Aucune")
-            st.write("**Toutes les colonnes du CSV:**")
-            st.code(", ".join(all_cols))
     
     # Tabs
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -2105,7 +1827,7 @@ def main():
         pct_scale = (scale_count / len(df) * 100) if len(df) > 0 else 0
         pct_pause = (pause_count / len(df) * 100) if len(df) > 0 else 0
         diversification = calculate_diversification_score(df)
-        alerts_count = len(detect_alerts(df, trends))
+        alerts_count = len(detect_alerts(df, trends, business_mode=biz_mode, cpl_cible=cpl_cible))
         
         health_score = round(
             (pct_scale * 2) +  # Bonus pour créatives à scaler
@@ -2143,21 +1865,39 @@ def main():
                 spend_delta = f"Budget total"
             st.metric("💰 Dépense", f"{total_spend:,.0f}€", delta=spend_delta)
         
-        with kpi2:
-            roas_seuil_val = df['roas_seuil'].iloc[0] if len(df) > 0 else 2.5
-            roas_status = f"↗ > seuil ({roas_seuil_val})" if avg_roas >= roas_seuil_val else f"↘ < seuil ({roas_seuil_val})"
-            st.metric("📈 ROAS", f"{avg_roas:.2f}", delta=roas_status, delta_color="normal" if avg_roas >= roas_seuil_val else "inverse")
-        
-        with kpi3:
-            st.metric("🛒 Achats", f"{total_achats:,.0f}")
-        
-        with kpi4:
-            st.metric("🛍️ Panier moyen", f"{avg_panier:.0f}€")
+        if is_leadgen:
+            # === KPIs Lead Gen ===
+            total_leads = df['leads'].sum()
+            avg_cpl = total_spend / total_leads if total_leads > 0 else 0
+            avg_cvr_lp = (total_leads / df['clics_lien'].sum() * 100) if df['clics_lien'].sum() > 0 else 0
+            
+            with kpi2:
+                cpl_status = f"↗ < cible ({cpl_cible:.0f}€)" if avg_cpl <= cpl_cible else f"↘ > cible ({cpl_cible:.0f}€)"
+                st.metric("📋 CPL moyen", f"{avg_cpl:.2f}€", delta=cpl_status, delta_color="normal" if avg_cpl <= cpl_cible else "inverse")
+            
+            with kpi3:
+                st.metric("📋 Leads", f"{total_leads:,.0f}")
+            
+            with kpi4:
+                st.metric("🎯 CVR Landing", f"{avg_cvr_lp:.2f}%")
+        else:
+            # === KPIs E-commerce ===
+            with kpi2:
+                roas_seuil_val = df['roas_seuil'].iloc[0] if len(df) > 0 else 2.5
+                roas_status = f"↗ > seuil ({roas_seuil_val})" if avg_roas >= roas_seuil_val else f"↘ < seuil ({roas_seuil_val})"
+                st.metric("📈 ROAS", f"{avg_roas:.2f}", delta=roas_status, delta_color="normal" if avg_roas >= roas_seuil_val else "inverse")
+            
+            with kpi3:
+                st.metric("🛒 Achats", f"{total_achats:,.0f}")
+            
+            with kpi4:
+                st.metric("🛍️ Panier moyen", f"{avg_panier:.0f}€")
         
         with kpi5:
             profit_status = "✅ Rentable" if total_profit > 0 else "❌ Perte"
             profit_color = "normal" if total_profit > 0 else "inverse"
-            st.metric("💵 Profit estimé", f"{total_profit:+,.0f}€", delta=profit_status, delta_color=profit_color)
+            profit_label = "💵 Économie vs cible" if is_leadgen else "💵 Profit estimé"
+            st.metric(profit_label, f"{total_profit:+,.0f}€", delta=profit_status, delta_color=profit_color)
         
         with kpi6:
             st.metric("🎯 Santé", f"{health_score}/100", delta=health_status, delta_color="normal" if health_score >= 50 else "inverse")
@@ -2176,8 +1916,11 @@ def main():
         
         # Info rentabilité
         if nb_non_profitable > 0:
-            roas_seuil_val = df['roas_seuil'].iloc[0] if len(df) > 0 else 2.5
-            st.warning(f"💸 **{nb_non_profitable}** créative{'s' if nb_non_profitable > 1 else ''} non rentable{'s' if nb_non_profitable > 1 else ''} (ROAS < {roas_seuil_val}) · {nb_profitable} rentable{'s' if nb_profitable > 1 else ''}")
+            if is_leadgen:
+                st.warning(f"💸 **{nb_non_profitable}** créative{'s' if nb_non_profitable > 1 else ''} au-dessus du CPL cible ({cpl_cible:.0f}€) · {nb_profitable} sous le seuil")
+            else:
+                roas_seuil_val = df['roas_seuil'].iloc[0] if len(df) > 0 else 2.5
+                st.warning(f"💸 **{nb_non_profitable}** créative{'s' if nb_non_profitable > 1 else ''} non rentable{'s' if nb_non_profitable > 1 else ''} (ROAS < {roas_seuil_val}) · {nb_profitable} rentable{'s' if nb_profitable > 1 else ''}")
         
         # ===== LIGNE 3: CARDS ACTIONS + GRAPHIQUE =====
         col_cards, col_chart = st.columns([3, 1])
@@ -2258,28 +2001,17 @@ def main():
                     elif has_daily and row['trend_signal'] == 'down':
                         trend_badge = f"<span class='badge badge-down'>{row['trend_score']:.0f}%</span>"
                     
-                    # Thumbnail
-                    thumb_url = row.get('thumbnail_url') if has_thumbnails and 'thumbnail_url' in row.index else None
-                    if thumb_url and pd.notna(thumb_url):
-                        thumb_html = f'<img src="{thumb_url}" style="width:44px; height:44px; object-fit:cover; border-radius:6px; margin-right:10px; border:1px solid {COLORS["border"]};" onerror="this.style.display=\'none\'"/>'
-                    else:
-                        thumb_html = ""
-                    
-                    # Échapper le nom pour le HTML
-                    nom_safe = escape_html(row['nom'][:35]) + ('...' if len(row['nom']) > 35 else '')
-                    
-                    card_html = f'''<div class="action-card scale-card" style="padding:0.6rem 0.8rem; margin-bottom:0.4rem;">
-<div style="display:flex; justify-content:space-between; align-items:center;">
-<div style="display:flex; align-items:center;">
-{thumb_html}<div>
-<strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{nom_safe}</span> {trend_badge}
-<div style="font-size:0.75rem; color:{COLORS['text_secondary']};">ROAS {row['roas']:.1f} · CTR {row['ctr_lien']:.2f}% · Pot. {row['scale_potential']}</div>
-</div>
-</div>
-<div style="font-size:0.7rem; background:{COLORS['accent_green']}; color:white; padding:2px 8px; border-radius:4px;">+20%</div>
-</div>
-</div>'''
-                    st.markdown(card_html, unsafe_allow_html=True)
+                    st.markdown(f"""
+                    <div class="action-card scale-card" style="padding:0.6rem 0.8rem; margin-bottom:0.4rem;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{row['nom'][:35]}{'...' if len(row['nom']) > 35 else ''}</span> {trend_badge}
+                                <div style="font-size:0.75rem; color:{COLORS['text_secondary']};">ROAS {row['roas']:.1f} · CTR {row['ctr_lien']:.2f}% · Pot. {row['scale_potential']}</div>
+                            </div>
+                            <div style="font-size:0.7rem; background:{COLORS['accent_green']}; color:white; padding:2px 8px; border-radius:4px;">+20%</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
                 if len(scale_df) > 4:
                     st.caption(f"... et {len(scale_df) - 4} autre(s)")
             else:
@@ -2295,14 +2027,11 @@ def main():
                     if has_daily:
                         trend_icon = "↗" if row['trend_signal'] == 'up' else "↘" if row['trend_signal'] == 'down' else "→"
                     
-                    # Thumbnail
-                    thumb_html = ""
-                    if has_thumbnails and pd.notna(row.get('thumbnail_url')):
-                        thumb_html = f'<img src="{row["thumbnail_url"]}" style="width:32px; height:32px; object-fit:cover; border-radius:4px; margin-right:8px; border:1px solid {COLORS["border"]};" onerror="this.style.display=\'none\'"/>'
-                    
-                    nom_safe = escape_html(row['nom'][:30]) + '...'
-                    card_html = f'<div class="action-card monitor-card" style="padding:0.5rem 0.8rem; margin-bottom:0.3rem;"><div style="display:flex; align-items:center;">{thumb_html}<span><strong style="color:{COLORS["text_primary"]};">{row["format"]}</strong> <span style="color:{COLORS["text_secondary"]};">·</span> <span style="color:{COLORS["text_primary"]};">{nom_safe}</span> <span style="color:{COLORS["text_muted"]};">{trend_icon}</span></span></div></div>'
-                    st.markdown(card_html, unsafe_allow_html=True)
+                    st.markdown(f"""
+                    <div class="action-card monitor-card" style="padding:0.5rem 0.8rem; margin-bottom:0.3rem;">
+                        <strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{row['nom'][:30]}...</span> <span style="color:{COLORS['text_muted']};">{trend_icon}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
         
         with col_right:
             # À tester (compact)
@@ -2311,27 +2040,17 @@ def main():
             
             if len(test_df) > 0:
                 for _, row in test_df.head(4).iterrows():
-                    # Thumbnail
-                    thumb_url = row.get('thumbnail_url') if has_thumbnails and 'thumbnail_url' in row.index else None
-                    if thumb_url and pd.notna(thumb_url):
-                        thumb_html = f'<img src="{thumb_url}" style="width:44px; height:44px; object-fit:cover; border-radius:6px; margin-right:10px; border:1px solid {COLORS["border"]};" onerror="this.style.display=\'none\'"/>'
-                    else:
-                        thumb_html = ""
-                    
-                    nom_safe = escape_html(row['nom'][:35]) + ('...' if len(row['nom']) > 35 else '')
-                    
-                    card_html = f'''<div class="action-card test-card" style="padding:0.6rem 0.8rem; margin-bottom:0.4rem;">
-<div style="display:flex; justify-content:space-between; align-items:center;">
-<div style="display:flex; align-items:center;">
-{thumb_html}<div>
-<strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{nom_safe}</span>
-<div style="font-size:0.75rem; color:{COLORS['text_secondary']};">ROAS {row['roas']:.1f} · Confiance {row['coefficient_confiance']*100:.0f}%</div>
-</div>
-</div>
-<div style="font-size:0.7rem; background:{COLORS['accent_blue']}; color:white; padding:2px 8px; border-radius:4px;">+50%</div>
-</div>
-</div>'''
-                    st.markdown(card_html, unsafe_allow_html=True)
+                    st.markdown(f"""
+                    <div class="action-card test-card" style="padding:0.6rem 0.8rem; margin-bottom:0.4rem;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{row['nom'][:35]}{'...' if len(row['nom']) > 35 else ''}</span>
+                                <div style="font-size:0.75rem; color:{COLORS['text_secondary']};">ROAS {row['roas']:.1f} · Confiance {row['coefficient_confiance']*100:.0f}%</div>
+                            </div>
+                            <div style="font-size:0.7rem; background:{COLORS['accent_blue']}; color:white; padding:2px 8px; border-radius:4px;">+50%</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
                 if len(test_df) > 4:
                     st.caption(f"... et {len(test_df) - 4} autre(s)")
             else:
@@ -2347,24 +2066,12 @@ def main():
                     if has_daily and row['trend_score'] < -20:
                         trend_badge = f"<span class='badge badge-down'>{row['trend_score']:.0f}%</span>"
                     
-                    # Thumbnail
-                    thumb_url = row.get('thumbnail_url') if has_thumbnails and 'thumbnail_url' in row.index else None
-                    if thumb_url and pd.notna(thumb_url):
-                        thumb_html = f'<img src="{thumb_url}" style="width:36px; height:36px; object-fit:cover; border-radius:6px; margin-right:8px; border:1px solid {COLORS["border"]};" onerror="this.style.display=\'none\'"/>'
-                    else:
-                        thumb_html = ""
-                    
-                    nom_safe = escape_html(row['nom'][:30]) + '...'
-                    
-                    card_html = f'''<div class="action-card pause-card" style="padding:0.5rem 0.8rem; margin-bottom:0.3rem;">
-<div style="display:flex; align-items:center;">
-{thumb_html}<div>
-<strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{nom_safe}</span> {trend_badge}
-<div style="font-size:0.7rem; color:{COLORS['text_secondary']};">Freq. {row['frequency']:.2f}</div>
-</div>
-</div>
-</div>'''
-                    st.markdown(card_html, unsafe_allow_html=True)
+                    st.markdown(f"""
+                    <div class="action-card pause-card" style="padding:0.5rem 0.8rem; margin-bottom:0.3rem;">
+                        <strong style="color:{COLORS['text_primary']};">{row['format']}</strong> <span style="color:{COLORS['text_secondary']};">·</span> <span style="color:{COLORS['text_primary']};">{row['nom'][:30]}...</span> {trend_badge}
+                        <div style="font-size:0.7rem; color:{COLORS['text_secondary']};">Freq. {row['frequency']:.2f}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
                 if len(pause_df) > 3:
                     st.caption(f"... et {len(pause_df) - 3} autre(s)")
             else:
@@ -2373,7 +2080,7 @@ def main():
     # ========== TAB 2: Alertes & Prédictions ==========
     with tab2:
         # Générer toutes les alertes
-        alerts = detect_alerts(df, trends)
+        alerts = detect_alerts(df, trends, business_mode=biz_mode, cpl_cible=cpl_cible)
         anomalies = detect_anomalies(df, sparklines) if has_daily else []
         fatigue_predictions = predict_fatigue(df, sparklines) if has_daily else []
         diversification_data = calculate_diversification_score(df)
@@ -2662,21 +2369,35 @@ def main():
             
             with col1:
                 st.subheader("💡 Par Concept (CCPT)")
-                concept_stats = df_analyse.groupby('concept').agg({
-                    'nom': 'count', 'depense': 'sum', 'achats': 'sum',
-                    'roas': 'mean', 'ctr_lien': 'mean', 'scale_potential': 'mean'
-                }).round(2)
-                concept_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'CTR %', 'Potentiel']
+                if is_leadgen:
+                    concept_stats = df_analyse.groupby('concept').agg({
+                        'nom': 'count', 'depense': 'sum', 'leads': 'sum',
+                        'cpl': 'mean', 'ctr_lien': 'mean', 'scale_potential': 'mean'
+                    }).round(2)
+                    concept_stats.columns = ['Créas', 'Dépense €', 'Leads', 'CPL €', 'CTR %', 'Potentiel']
+                else:
+                    concept_stats = df_analyse.groupby('concept').agg({
+                        'nom': 'count', 'depense': 'sum', 'achats': 'sum',
+                        'roas': 'mean', 'ctr_lien': 'mean', 'scale_potential': 'mean'
+                    }).round(2)
+                    concept_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'CTR %', 'Potentiel']
                 concept_stats = concept_stats.sort_values('Potentiel', ascending=False)
                 st.dataframe(concept_stats, use_container_width=True)
             
             with col2:
                 st.subheader("📌 Par USP")
-                usp_stats = df_analyse.groupby('usp').agg({
-                    'nom': 'count', 'depense': 'sum', 'achats': 'sum',
-                    'roas': 'mean', 'ctr_lien': 'mean', 'scale_potential': 'mean'
-                }).round(2)
-                usp_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'CTR %', 'Potentiel']
+                if is_leadgen:
+                    usp_stats = df_analyse.groupby('usp').agg({
+                        'nom': 'count', 'depense': 'sum', 'leads': 'sum',
+                        'cpl': 'mean', 'ctr_lien': 'mean', 'scale_potential': 'mean'
+                    }).round(2)
+                    usp_stats.columns = ['Créas', 'Dépense €', 'Leads', 'CPL €', 'CTR %', 'Potentiel']
+                else:
+                    usp_stats = df_analyse.groupby('usp').agg({
+                        'nom': 'count', 'depense': 'sum', 'achats': 'sum',
+                        'roas': 'mean', 'ctr_lien': 'mean', 'scale_potential': 'mean'
+                    }).round(2)
+                    usp_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'CTR %', 'Potentiel']
                 usp_stats = usp_stats.sort_values('Potentiel', ascending=False)
             st.dataframe(usp_stats, use_container_width=True)
             
@@ -2687,22 +2408,37 @@ def main():
             
             with col3:
                 st.subheader("👤 Par Persona")
-                persona_stats = df_analyse.groupby('persona').agg({
-                    'nom': 'count', 'depense': 'sum', 'achats': 'sum',
-                    'roas': 'mean', 'ctr_lien': 'mean', 'scale_potential': 'mean',
-                    'profit_estime': 'sum'
-                }).round(2)
-                persona_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'CTR %', 'Potentiel', 'Profit €']
+                if is_leadgen:
+                    persona_stats = df_analyse.groupby('persona').agg({
+                        'nom': 'count', 'depense': 'sum', 'leads': 'sum',
+                        'cpl': 'mean', 'ctr_lien': 'mean', 'scale_potential': 'mean',
+                        'profit_estime': 'sum'
+                    }).round(2)
+                    persona_stats.columns = ['Créas', 'Dépense €', 'Leads', 'CPL €', 'CTR %', 'Potentiel', 'Éco. vs cible €']
+                else:
+                    persona_stats = df_analyse.groupby('persona').agg({
+                        'nom': 'count', 'depense': 'sum', 'achats': 'sum',
+                        'roas': 'mean', 'ctr_lien': 'mean', 'scale_potential': 'mean',
+                        'profit_estime': 'sum'
+                    }).round(2)
+                    persona_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'CTR %', 'Potentiel', 'Profit €']
                 persona_stats = persona_stats.sort_values('Potentiel', ascending=False)
                 st.dataframe(persona_stats, use_container_width=True)
             
             with col4:
                 st.subheader("🎬 Par Format")
-                format_stats = df_analyse.groupby('format').agg({
-                    'nom': 'count', 'depense': 'sum', 'achats': 'sum',
-                    'roas': 'mean', 'ctr_lien': 'mean', 'scale_potential': 'mean'
-                }).round(2)
-                format_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'CTR %', 'Potentiel']
+                if is_leadgen:
+                    format_stats = df_analyse.groupby('format').agg({
+                        'nom': 'count', 'depense': 'sum', 'leads': 'sum',
+                        'cpl': 'mean', 'ctr_lien': 'mean', 'scale_potential': 'mean'
+                    }).round(2)
+                    format_stats.columns = ['Créas', 'Dépense €', 'Leads', 'CPL €', 'CTR %', 'Potentiel']
+                else:
+                    format_stats = df_analyse.groupby('format').agg({
+                        'nom': 'count', 'depense': 'sum', 'achats': 'sum',
+                        'roas': 'mean', 'ctr_lien': 'mean', 'scale_potential': 'mean'
+                    }).round(2)
+                    format_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'CTR %', 'Potentiel']
                 format_stats = format_stats.sort_values('Potentiel', ascending=False)
                 st.dataframe(format_stats, use_container_width=True)
             
@@ -2710,11 +2446,18 @@ def main():
             
             # LIGNE 3: Date de création
             with st.expander("📅 Par Date de création", expanded=False):
-                date_stats = df_analyse.groupby('date_creative').agg({
-                    'nom': 'count', 'depense': 'sum', 'achats': 'sum',
-                    'roas': 'mean', 'scale_potential': 'mean'
-                }).round(2)
-                date_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'Potentiel']
+                if is_leadgen:
+                    date_stats = df_analyse.groupby('date_creative').agg({
+                        'nom': 'count', 'depense': 'sum', 'leads': 'sum',
+                        'cpl': 'mean', 'scale_potential': 'mean'
+                    }).round(2)
+                    date_stats.columns = ['Créas', 'Dépense €', 'Leads', 'CPL €', 'Potentiel']
+                else:
+                    date_stats = df_analyse.groupby('date_creative').agg({
+                        'nom': 'count', 'depense': 'sum', 'achats': 'sum',
+                        'roas': 'mean', 'scale_potential': 'mean'
+                    }).round(2)
+                    date_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'Potentiel']
                 date_stats = date_stats.sort_index(ascending=False)
                 st.dataframe(date_stats, use_container_width=True)
             
@@ -2723,21 +2466,35 @@ def main():
             
             with col_camp:
                 with st.expander("📢 Par Campagne", expanded=False):
-                    campagne_stats = df_analyse.groupby('campagne').agg({
-                        'nom': 'count', 'depense': 'sum', 'achats': 'sum',
-                        'roas': 'mean', 'scale_potential': 'mean'
-                    }).round(2)
-                    campagne_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'Potentiel']
+                    if is_leadgen:
+                        campagne_stats = df_analyse.groupby('campagne').agg({
+                            'nom': 'count', 'depense': 'sum', 'leads': 'sum',
+                            'cpl': 'mean', 'scale_potential': 'mean'
+                        }).round(2)
+                        campagne_stats.columns = ['Créas', 'Dépense €', 'Leads', 'CPL €', 'Potentiel']
+                    else:
+                        campagne_stats = df_analyse.groupby('campagne').agg({
+                            'nom': 'count', 'depense': 'sum', 'achats': 'sum',
+                            'roas': 'mean', 'scale_potential': 'mean'
+                        }).round(2)
+                        campagne_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'Potentiel']
                     campagne_stats = campagne_stats.sort_values('Dépense €', ascending=False)
                     st.dataframe(campagne_stats, use_container_width=True)
             
             with col_aud:
                 with st.expander("🎯 Par Audience (AdSet)", expanded=False):
-                    audience_stats = df_analyse.groupby('audience').agg({
-                        'nom': 'count', 'depense': 'sum', 'achats': 'sum',
-                        'roas': 'mean', 'scale_potential': 'mean'
-                    }).round(2)
-                    audience_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'Potentiel']
+                    if is_leadgen:
+                        audience_stats = df_analyse.groupby('audience').agg({
+                            'nom': 'count', 'depense': 'sum', 'leads': 'sum',
+                            'cpl': 'mean', 'scale_potential': 'mean'
+                        }).round(2)
+                        audience_stats.columns = ['Créas', 'Dépense €', 'Leads', 'CPL €', 'Potentiel']
+                    else:
+                        audience_stats = df_analyse.groupby('audience').agg({
+                            'nom': 'count', 'depense': 'sum', 'achats': 'sum',
+                            'roas': 'mean', 'scale_potential': 'mean'
+                        }).round(2)
+                        audience_stats.columns = ['Créas', 'Dépense €', 'Achats', 'ROAS', 'Potentiel']
                     audience_stats = audience_stats.sort_values('Dépense €', ascending=False)
                     st.dataframe(audience_stats, use_container_width=True)
             
@@ -2968,110 +2725,7 @@ def main():
             display_df = filtered_df.copy()
             roas_seuil = display_df['roas_seuil'].iloc[0] if 'roas_seuil' in display_df.columns else 2.5
             
-            # ===== SÉLECTEUR DE COLONNES =====
-            # Définir toutes les colonnes disponibles par catégorie
-            col_categories = {
-                "🖼️ Identification": {
-                    "Thumb": ("thumbnail_url", "Miniature"),
-                    "Format": ("format", "Type de créative"),
-                    "Nom": ("nom", "Nom complet"),
-                    "Campagne": ("campagne", "Nom de campagne"),
-                    "Audience": ("audience", "Ensemble de publicités"),
-                },
-                "📊 Scores calculés": {
-                    "Score Global": ("score_global", "Score pondéré"),
-                    "Score Profit": ("score_profitabilite", "Score profitabilité V2"),
-                    "Score Trafic": ("score_trafic", "Score trafic"),
-                    "Score Notoriété": ("score_notoriete", "Score notoriété"),
-                    "Potentiel": ("scale_potential", "Potentiel de scale"),
-                    "Action": ("action", "Action recommandée"),
-                    "Confiance": ("coefficient_confiance", "Coefficient de confiance"),
-                },
-                "📈 Tendances": {
-                    "Trend Score": ("trend_score", "Score tendance global"),
-                    "Trend CTR": ("trend_ctr", "Évolution CTR %"),
-                    "Trend CPM": ("trend_cpm", "Évolution CPM %"),
-                },
-                "💰 Profit & ROAS": {
-                    "ROAS": ("roas", "Return On Ad Spend"),
-                    "Profit €": ("profit_estime", "Profit estimé"),
-                    "Rentable": ("is_profitable", "Est rentable"),
-                    "CPA": ("cpa_calc", "Coût par achat"),
-                    "CVR %": ("cvr", "Taux de conversion"),
-                    "Panier moyen": ("panier_moyen", "Valeur moyenne panier"),
-                    "ROAS Seuil": ("roas_seuil", "Seuil de rentabilité"),
-                },
-                "🚀 Trafic": {
-                    "CTR %": ("ctr_lien", "Click-Through Rate"),
-                    "CPC €": ("cpc_lien", "Coût par clic"),
-                    "Clics": ("clics_lien", "Nombre de clics"),
-                },
-                "👁️ Notoriété": {
-                    "CPM €": ("cpm", "Coût pour 1000 impressions"),
-                    "CPMu €": ("cpmu", "CPM unique"),
-                    "Impressions": ("impressions", "Total impressions"),
-                    "Reach": ("reach", "Couverture unique"),
-                    "Fréquence": ("frequency", "Répétition moyenne"),
-                },
-                "💵 Dépenses & Achats": {
-                    "Dépense €": ("depense", "Budget dépensé"),
-                    "Achats": ("achats", "Nombre d'achats"),
-                    "Valeur achats €": ("valeur_achats", "Revenu total"),
-                    "Ajouts panier": ("ajouts_panier", "Ajouts au panier"),
-                },
-            }
-            
-            # Presets de colonnes
-            presets = {
-                "🎯 Essentiel": ["Thumb", "Format", "Nom", "Score Global", "Trend Score", "ROAS", "Profit €", "CTR %", "Dépense €", "Potentiel", "Action"],
-                "📊 Tous les scores": ["Thumb", "Format", "Nom", "Score Global", "Score Profit", "Score Trafic", "Score Notoriété", "Potentiel", "Confiance", "Action"],
-                "💰 Focus Profit": ["Thumb", "Format", "Nom", "ROAS", "Profit €", "Rentable", "CPA", "CVR %", "Panier moyen", "Achats", "Action"],
-                "🚀 Focus Trafic": ["Thumb", "Format", "Nom", "CTR %", "CPC €", "Clics", "Impressions", "Score Trafic", "Action"],
-                "📈 Focus Tendances": ["Thumb", "Format", "Nom", "Trend Score", "Trend CTR", "Trend CPM", "Score Global", "Action"],
-                "📋 Complet": ["Thumb", "Format", "Nom", "Score Global", "ROAS", "Profit €", "CTR %", "CPC €", "CPM €", "Impressions", "Reach", "Dépense €", "Achats", "Potentiel", "Action"],
-            }
-            
-            # Initialiser la sélection dans session_state
-            if 'selected_columns' not in st.session_state:
-                st.session_state.selected_columns = presets["🎯 Essentiel"]
-            
-            # Interface de sélection
-            with st.expander("⚙️ Colonnes à afficher", expanded=False):
-                col_preset, col_select = st.columns([1, 2])
-                
-                with col_preset:
-                    st.markdown("**Presets rapides**")
-                    selected_preset = st.radio(
-                        "Preset",
-                        options=list(presets.keys()),
-                        index=0,
-                        label_visibility="collapsed",
-                        key="column_preset"
-                    )
-                    if st.button("Appliquer le preset", use_container_width=True):
-                        st.session_state.selected_columns = presets[selected_preset]
-                        st.rerun()
-                
-                with col_select:
-                    st.markdown("**Sélection personnalisée**")
-                    # Créer la liste de toutes les colonnes disponibles
-                    all_columns = []
-                    for cat, cols in col_categories.items():
-                        for col_name, (col_key, col_help) in cols.items():
-                            if col_key in display_df.columns or (col_name == "Thumb" and has_thumbnails):
-                                all_columns.append(col_name)
-                    
-                    selected_cols = st.multiselect(
-                        "Colonnes",
-                        options=all_columns,
-                        default=st.session_state.selected_columns,
-                        label_visibility="collapsed",
-                        key="column_multiselect"
-                    )
-                    st.session_state.selected_columns = selected_cols
-            
-            # ===== PRÉPARATION DES DONNÉES =====
-            # Fonctions de formatage
+            # Format avec emoji
             def format_type_emoji(fmt):
                 emojis = {'IMG': '🖼️', 'VID': '🎬', 'CAR': '🎠', 'GIF': '✨', 'UGC': '👤', 'STO': '📱'}
                 return f"{emojis.get(fmt, '📄')} {fmt}"
@@ -3082,8 +2736,6 @@ def main():
                 return f"{icons.get(grade, '⚪')} {grade} ({score})"
             
             def format_trend_simple(value):
-                if pd.isna(value) or value == 0:
-                    return "➖ 0%"
                 if value > 15:
                     return f"🟢 +{value:.0f}%"
                 elif value > 0:
@@ -3112,141 +2764,78 @@ def main():
                 icons = {'scale': '🚀 SCALE', 'test': '⚡ TEST', 'monitor': '👁️ WATCH', 'pause': '⏸️ PAUSE'}
                 return icons.get(action, action)
             
-            # Créer le DataFrame final avec les colonnes sélectionnées
-            final_data = {}
-            column_config = {}
+            # Construire les colonnes
+            display_df['Type'] = display_df['format']  # Juste le code format (plus compact)
+            display_df['Nom'] = display_df['nom']  # Nom complet
+            display_df['Score'] = display_df['score_global'].apply(format_grade_simple)
+            display_df['Trend'] = display_df['trend_score'].apply(format_trend_simple) if has_daily else "➖"
             
-            for col_name in st.session_state.selected_columns:
-                # Trouver la colonne source
-                for cat, cols in col_categories.items():
-                    if col_name in cols:
-                        col_key, col_help = cols[col_name]
-                        
-                        if col_name == "Thumb" and has_thumbnails and 'thumbnail_url' in display_df.columns:
-                            final_data[col_name] = display_df['thumbnail_url'].fillna('')
-                            column_config[col_name] = st.column_config.ImageColumn("🖼️", width=55)
-                        elif col_key in display_df.columns:
-                            # Formater selon le type
-                            if col_name == "Format":
-                                final_data[col_name] = display_df[col_key]
-                                column_config[col_name] = st.column_config.TextColumn("Fmt", width=50)
-                            elif col_name == "Nom":
-                                final_data[col_name] = display_df[col_key]
-                                column_config[col_name] = st.column_config.TextColumn("Nom", width=350)
-                            elif col_name == "Score Global":
-                                final_data[col_name] = display_df[col_key].apply(format_grade_simple)
-                                column_config[col_name] = st.column_config.TextColumn("Score", width=85)
-                            elif col_name in ["Score Profit", "Score Trafic", "Score Notoriété"]:
-                                # Barre native ProgressColumn
-                                short_name = col_name.replace("Score ", "")
-                                final_data[col_name] = display_df[col_key]
-                                column_config[col_name] = st.column_config.ProgressColumn(
-                                    short_name, format="%d", min_value=0, max_value=100, width=100
-                                )
-                                # Colonne emoji adjacente pour le niveau
-                                emoji_col = f"lvl_{short_name}"
-                                def get_score_emoji(x):
-                                    if pd.isna(x) or x == 0:
-                                        return "⚪"
-                                    elif x >= 70:
-                                        return "🟢"
-                                    elif x >= 55:
-                                        return "🟡"
-                                    elif x >= 40:
-                                        return "🟠"
-                                    else:
-                                        return "🔴"
-                                final_data[emoji_col] = display_df[col_key].apply(get_score_emoji)
-                                column_config[emoji_col] = st.column_config.TextColumn("", width=35)
-                            elif col_name == "Potentiel":
-                                final_data[col_name] = display_df[col_key]
-                                column_config[col_name] = st.column_config.ProgressColumn("Pot.", format="%d", min_value=0, max_value=100, width=80)
-                            elif col_name == "Action":
-                                final_data[col_name] = display_df[col_key].apply(format_action_simple)
-                                column_config[col_name] = st.column_config.TextColumn("Action", width=90)
-                            elif col_name == "Confiance":
-                                final_data[col_name] = display_df[col_key].apply(lambda x: f"{x*100:.0f}%")
-                                column_config[col_name] = st.column_config.TextColumn("Conf.", width=60)
-                            elif col_name in ["Trend Score", "Trend CTR", "Trend CPM"]:
-                                final_data[col_name] = display_df[col_key].apply(format_trend_simple)
-                                column_config[col_name] = st.column_config.TextColumn(col_name.replace("Trend ", "Δ"), width=70)
-                            elif col_name == "ROAS":
-                                final_data[col_name] = display_df[col_key].apply(lambda x: format_roas_simple(x, roas_seuil))
-                                column_config[col_name] = st.column_config.TextColumn("ROAS", width=70)
-                            elif col_name == "Profit €":
-                                final_data[col_name] = display_df.apply(lambda r: format_profit_simple(r.get('is_profitable', False), r.get('profit_estime', 0)), axis=1)
-                                column_config[col_name] = st.column_config.TextColumn("Profit", width=85)
-                            elif col_name == "Rentable":
-                                final_data[col_name] = display_df[col_key].apply(lambda x: "✅ Oui" if x else "❌ Non")
-                                column_config[col_name] = st.column_config.TextColumn("Rent.", width=65)
-                            elif col_name in ["CTR %", "CVR %"]:
-                                final_data[col_name] = display_df[col_key].apply(lambda x: f"{x:.2f}%")
-                                column_config[col_name] = st.column_config.TextColumn(col_name.replace(" %", ""), width=65)
-                            elif col_name in ["CPC €", "CPM €", "CPMu €", "CPA"]:
-                                final_data[col_name] = display_df[col_key].apply(lambda x: f"{x:.2f}€" if x > 0 else "➖")
-                                column_config[col_name] = st.column_config.TextColumn(col_name.replace(" €", ""), width=65)
-                            elif col_name == "Dépense €":
-                                final_data[col_name] = display_df[col_key].apply(lambda x: f"{x:.0f}€")
-                                column_config[col_name] = st.column_config.TextColumn("Dép.", width=60)
-                            elif col_name == "Panier moyen":
-                                final_data[col_name] = display_df[col_key].apply(lambda x: f"{x:.0f}€" if x > 0 else "➖")
-                                column_config[col_name] = st.column_config.TextColumn("Panier", width=65)
-                            elif col_name == "Valeur achats €":
-                                final_data[col_name] = display_df[col_key].apply(lambda x: f"{x:,.0f}€")
-                                column_config[col_name] = st.column_config.TextColumn("CA", width=80)
-                            elif col_name in ["Impressions", "Reach", "Clics", "Achats", "Ajouts panier"]:
-                                final_data[col_name] = display_df[col_key].apply(lambda x: f"{x:,.0f}")
-                                column_config[col_name] = st.column_config.TextColumn(col_name[:5], width=70)
-                            elif col_name == "Fréquence":
-                                final_data[col_name] = display_df[col_key].apply(lambda x: f"{x:.2f}")
-                                column_config[col_name] = st.column_config.TextColumn("Freq.", width=60)
-                            elif col_name == "ROAS Seuil":
-                                final_data[col_name] = display_df[col_key].apply(lambda x: f"{x:.2f}")
-                                column_config[col_name] = st.column_config.TextColumn("Seuil", width=60)
-                            elif col_name in ["Campagne", "Audience"]:
-                                final_data[col_name] = display_df[col_key]
-                                column_config[col_name] = st.column_config.TextColumn(col_name, width=150)
-                            else:
-                                final_data[col_name] = display_df[col_key]
-                                column_config[col_name] = st.column_config.TextColumn(col_name, width=80)
-                        break
+            if is_leadgen:
+                def format_cpl_simple(cpl, cible):
+                    if cpl <= 0:
+                        return "➖"
+                    elif cpl <= cible * 0.7:
+                        return f"🟢 {cpl:.2f}€"
+                    elif cpl <= cible:
+                        return f"🟡 {cpl:.2f}€"
+                    else:
+                        return f"🔴 {cpl:.2f}€"
+                
+                display_df['CPL'] = display_df['cpl'].apply(lambda x: format_cpl_simple(x, cpl_cible))
+                display_df['Leads'] = display_df['leads'].apply(lambda x: f"{x:.0f}")
+                display_df['CVR LP'] = display_df['cvr_lp'].apply(lambda x: f"{x:.2f}%")
+                display_df['Statut'] = display_df['is_profitable'].apply(lambda x: "✅ Sous cible" if x else "❌ Au-dessus")
+            else:
+                display_df['ROAS'] = display_df['roas'].apply(lambda x: format_roas_simple(x, roas_seuil))
+                display_df['Profit'] = display_df.apply(lambda r: format_profit_simple(r.get('is_profitable', False), r.get('profit_estime', 0)), axis=1)
             
-            if len(final_data) > 0:
-                final_df = pd.DataFrame(final_data)
-                
-                # Réorganiser les colonnes pour que les emojis de niveau soient juste après les barres
-                ordered_cols = []
-                for col in final_df.columns:
-                    if col.startswith('lvl_'):
-                        continue  # On les ajoutera après leur score parent
-                    ordered_cols.append(col)
-                    # Vérifier si c'est un score qui a une colonne emoji
-                    if col in ["Score Profit", "Score Trafic", "Score Notoriété"]:
-                        short_name = col.replace("Score ", "")
-                        emoji_col = f"lvl_{short_name}"
-                        if emoji_col in final_df.columns:
-                            ordered_cols.append(emoji_col)
-                
-                # Ajouter les colonnes lvl_ orphelines (au cas où)
-                for col in final_df.columns:
-                    if col.startswith('lvl_') and col not in ordered_cols:
-                        ordered_cols.append(col)
-                
-                final_df = final_df[ordered_cols]
-                
-                # Hauteur dynamique
-                table_height = min(550, max(300, 50 + len(final_df) * 40))
-                
-                # Afficher le tableau
-                st.dataframe(
-                    final_df,
-                    use_container_width=True,
-                    height=table_height,
-                    column_config=column_config,
-                    hide_index=True
-                )
-                
-                st.caption(f"📊 {len(final_df)} créatives · {len(st.session_state.selected_columns)} colonnes affichées")
+            display_df['CTR'] = display_df['ctr_lien'].apply(lambda x: f"{x:.2f}%")
+            display_df['Dép.'] = display_df['depense'].apply(lambda x: f"{x:.0f}€")
+            display_df['Action'] = display_df['action'].apply(format_action_simple)
+            
+            # Sélectionner les colonnes (ordre optimisé pour voir le nom)
+            if is_leadgen:
+                columns_display = ['Type', 'Nom', 'Score', 'Trend', 'CPL', 'Leads', 'CVR LP', 'Statut', 'CTR', 'Dép.', 'scale_potential', 'Action']
+            else:
+                columns_display = ['Type', 'Nom', 'Score', 'Trend', 'ROAS', 'Profit', 'CTR', 'Dép.', 'scale_potential', 'Action']
+            final_df = display_df[columns_display].copy()
+            final_df = final_df.rename(columns={'scale_potential': 'Pot.'})
+            
+            # Configuration des colonnes - NOM très large, autres colonnes compactes
+            column_config = {
+                "Type": st.column_config.TextColumn("Fmt", width=45),
+                "Nom": st.column_config.TextColumn("Nom de la créative", width=450),
+                "Score": st.column_config.TextColumn("📊", width=75, help="Score global"),
+                "Trend": st.column_config.TextColumn("📈", width=65, help="Tendance"),
+                "CTR": st.column_config.TextColumn("👆", width=55, help="CTR"),
+                "Dép.": st.column_config.TextColumn("€", width=50, help="Dépense"),
+                "Pot.": st.column_config.ProgressColumn("🎯", format="%d", min_value=0, max_value=100, width=70, help="Potentiel"),
+                "Action": st.column_config.TextColumn("⚡", width=80, help="Action recommandée"),
+            }
+            if is_leadgen:
+                column_config.update({
+                    "CPL": st.column_config.TextColumn("📋 CPL", width=65, help="Coût Par Lead"),
+                    "Leads": st.column_config.TextColumn("📋", width=50, help="Nombre de leads"),
+                    "CVR LP": st.column_config.TextColumn("🎯", width=55, help="CVR Landing Page"),
+                    "Statut": st.column_config.TextColumn("💵", width=80, help="Statut vs CPL cible"),
+                })
+            else:
+                column_config.update({
+                    "ROAS": st.column_config.TextColumn("💰", width=55, help="ROAS"),
+                    "Profit": st.column_config.TextColumn("💵", width=75, help="Profit estimé"),
+                })
+            
+            # Hauteur dynamique
+            table_height = min(550, max(300, 50 + len(final_df) * 40))
+            
+            # Afficher
+            st.dataframe(
+                final_df,
+                use_container_width=True,
+                height=table_height,
+                column_config=column_config,
+                hide_index=True
+            )
             
             # Section détails créative
             st.markdown(f"<div style='margin-top:1rem;'></div>", unsafe_allow_html=True)
@@ -3259,34 +2848,22 @@ def main():
                 )
                 if creative_select:
                     selected_row = filtered_df[filtered_df['nom'] == creative_select].iloc[0]
-                    
-                    # Thumbnail HTML si disponible
-                    thumb_section = ""
-                    if has_thumbnails and pd.notna(selected_row.get('thumbnail_url')):
-                        thumb_section = f'''
-                        <div style="float:left; margin-right:1.5rem; margin-bottom:1rem;">
-                            <img src="{selected_row['thumbnail_url']}" style="width:120px; height:120px; object-fit:cover; border-radius:12px; border:2px solid {COLORS['border']};" onerror="this.style.display='none'"/>
-                        </div>
-                        '''
-                    
                     st.markdown(f"""
-                    <div style="background:{COLORS['bg_secondary']}; border:1px solid {COLORS['border']}; border-radius:12px; padding:1.25rem; overflow:hidden;">
-                        {thumb_section}
+                    <div style="background:{COLORS['bg_secondary']}; border:1px solid {COLORS['border']}; border-radius:12px; padding:1.25rem;">
                         <div style="color:{COLORS['text_muted']}; font-size:0.75rem; text-transform:uppercase; margin-bottom:0.5rem;">Nom complet</div>
                         <div style="color:{COLORS['text_primary']}; font-size:1rem; font-weight:500; word-break:break-all; line-height:1.5;">{creative_select}</div>
-                        <div style="clear:both;"></div>
                         <div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:1rem; margin-top:1rem; padding-top:1rem; border-top:1px solid {COLORS['border']};">
                             <div>
                                 <div style="color:{COLORS['text_muted']}; font-size:0.7rem;">Format</div>
                                 <div style="color:{COLORS['text_primary']}; font-weight:600;">{selected_row['format']}</div>
                             </div>
                             <div>
-                                <div style="color:{COLORS['text_muted']}; font-size:0.7rem;">ROAS</div>
-                                <div style="color:{'#22c55e' if selected_row['roas'] >= roas_seuil else '#ef4444'}; font-weight:600;">{selected_row['roas']:.2f}</div>
+                                <div style="color:{COLORS['text_muted']}; font-size:0.7rem;">{'CPL' if is_leadgen else 'ROAS'}</div>
+                                <div style="color:{'#22c55e' if (selected_row.get('cpl', 0) <= cpl_cible if is_leadgen else selected_row['roas'] >= roas_seuil) else '#ef4444'}; font-weight:600;">{f"{selected_row.get('cpl', 0):.2f}€" if is_leadgen else f"{selected_row['roas']:.2f}"}</div>
                             </div>
                             <div>
-                                <div style="color:{COLORS['text_muted']}; font-size:0.7rem;">Profit</div>
-                                <div style="color:{'#22c55e' if selected_row.get('is_profitable', False) else '#ef4444'}; font-weight:600;">{selected_row.get('profit_estime', 0):+,.0f}€</div>
+                                <div style="color:{COLORS['text_muted']}; font-size:0.7rem;">{'Leads' if is_leadgen else 'Profit'}</div>
+                                <div style="color:{'#22c55e' if selected_row.get('is_profitable', False) else '#ef4444'}; font-weight:600;">{f"{selected_row.get('leads', 0):.0f}" if is_leadgen else f"{selected_row.get('profit_estime', 0):+,.0f}€"}</div>
                             </div>
                             <div>
                                 <div style="color:{COLORS['text_muted']}; font-size:0.7rem;">Potentiel</div>
@@ -3339,6 +2916,11 @@ def main():
                         color = "🟢" if value >= high else "🟡" if value >= mid else "🟠" if value >= low else "🔴"
                     return f"{color} {value:.{decimals}f}{suffix}" if decimals > 0 else f"{color} {value:,.0f}{suffix}"
                 
+                def format_score_color(score):
+                    grade = get_grade(score)
+                    color = "🟢" if score >= 60 else "🟡" if score >= 50 else "🟠" if score >= 40 else "🔴"
+                    return f"{color} {score} ({grade})"
+                
                 # Quartiles
                 roas_q25, roas_q50, roas_q75 = filtered_df['roas'].quantile([0.25, 0.5, 0.75])
                 ctr_q25, ctr_q50, ctr_q75 = filtered_df['ctr_lien'].quantile([0.25, 0.5, 0.75])
@@ -3349,85 +2931,54 @@ def main():
                 tab_profit, tab_trafic, tab_notoriete, tab_tendance = st.tabs(["💰 Profit", "🚀 Trafic", "👁️ Notoriété", "📈 Tendance"])
                 
                 with tab_profit:
-                    st.caption("**Score Profit V2** = ROAS (40%) + CPA inversé (25%) + CVR (15%) + Panier moyen (20%)")
-                    cpa_q25, cpa_q50, cpa_q75 = filtered_df[filtered_df['cpa_calc'] > 0]['cpa_calc'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cpa_calc'] > 0]) > 0 else (10, 20, 40)
-                    cvr_q25, cvr_q50, cvr_q75 = filtered_df[filtered_df['cvr'] > 0]['cvr'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cvr'] > 0]) > 0 else (1, 2, 5)
-                    panier_q25, panier_q50, panier_q75 = filtered_df[filtered_df['panier_moyen'] > 0]['panier_moyen'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['panier_moyen'] > 0]) > 0 else (20, 40, 80)
-                    
-                    profit_cols = ['nom', 'format', 'roas', 'cpa_calc', 'cvr', 'panier_moyen', 'profit_estime', 'is_profitable', 'achats', 'score_profitabilite']
-                    if has_thumbnails:
-                        profit_cols.insert(0, 'thumbnail_url')
-                    profit_df = filtered_df[profit_cols].copy()
-                    profit_df['ROAS'] = profit_df['roas'].apply(lambda x: format_metric_color(x, (roas_q25, roas_q50, roas_q75), inverse=False, decimals=2))
-                    profit_df['CPA'] = profit_df['cpa_calc'].apply(lambda x: format_metric_color(x, (cpa_q25, cpa_q50, cpa_q75), inverse=True, suffix="€", decimals=2))
-                    profit_df['CVR'] = profit_df['cvr'].apply(lambda x: format_metric_color(x, (cvr_q25, cvr_q50, cvr_q75), inverse=False, suffix="%", decimals=2))
-                    profit_df['Panier'] = profit_df['panier_moyen'].apply(lambda x: format_metric_color(x, (panier_q25, panier_q50, panier_q75), inverse=False, suffix="€", decimals=0))
-                    profit_df['Profit €'] = profit_df.apply(lambda r: f"{'✅' if r['is_profitable'] else '❌'} {r['profit_estime']:+,.0f}€", axis=1)
-                    # Barre native + emoji
-                    profit_df['Score'] = profit_df['score_profitabilite']
-                    profit_df['Lvl'] = profit_df['score_profitabilite'].apply(lambda x: "🟢" if x >= 70 else "🟡" if x >= 55 else "🟠" if x >= 40 else "🔴" if x > 0 else "⚪")
-                    
-                    display_cols = ['format', 'nom', 'ROAS', 'CPA', 'CVR', 'Panier', 'Profit €', 'achats', 'Score', 'Lvl']
-                    col_config = {
-                        'Score': st.column_config.ProgressColumn("Score", format="%d", min_value=0, max_value=100, width=100),
-                        'Lvl': st.column_config.TextColumn("", width=35)
-                    }
-                    if has_thumbnails:
-                        profit_df.rename(columns={'thumbnail_url': 'Thumb'}, inplace=True)
-                        display_cols.insert(0, 'Thumb')
-                        col_config['Thumb'] = st.column_config.ImageColumn("🖼️", width=50)
-                    st.dataframe(profit_df[display_cols], use_container_width=True, height=min(300, 40 + len(profit_df) * 35), hide_index=True, column_config=col_config)
+                    if is_leadgen:
+                        st.caption("**Score Profit Lead Gen** = CPL ratio vs cible (50%) + CVR Landing Page (30%) + Volume Leads (20%)")
+                        cpl_q25, cpl_q50, cpl_q75 = filtered_df[filtered_df['cpl'] > 0]['cpl'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cpl'] > 0]) > 0 else (5, 15, 30)
+                        cvr_lp_q25, cvr_lp_q50, cvr_lp_q75 = filtered_df[filtered_df['cvr_lp'] > 0]['cvr_lp'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cvr_lp'] > 0]) > 0 else (1, 3, 8)
+                        leads_q25, leads_q50, leads_q75 = filtered_df[filtered_df['leads'] > 0]['leads'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['leads'] > 0]) > 0 else (1, 5, 15)
+                        
+                        profit_df = filtered_df[['nom', 'format', 'cpl', 'cvr_lp', 'leads', 'depense', 'is_profitable', 'score_profitabilite']].copy()
+                        profit_df['CPL'] = profit_df['cpl'].apply(lambda x: format_metric_color(x, (cpl_q25, cpl_q50, cpl_q75), inverse=True, suffix="€", decimals=2))
+                        profit_df['CVR LP'] = profit_df['cvr_lp'].apply(lambda x: format_metric_color(x, (cvr_lp_q25, cvr_lp_q50, cvr_lp_q75), inverse=False, suffix="%", decimals=2))
+                        profit_df['Leads'] = profit_df['leads'].apply(lambda x: format_metric_color(x, (leads_q25, leads_q50, leads_q75), inverse=False, suffix="", decimals=0))
+                        profit_df['Statut'] = profit_df['is_profitable'].apply(lambda x: "✅ Sous cible" if x else "❌ Au-dessus")
+                        profit_df['Score'] = profit_df['score_profitabilite'].apply(format_score_color)
+                        st.dataframe(profit_df[['format', 'nom', 'CPL', 'CVR LP', 'Leads', 'depense', 'Statut', 'Score']], use_container_width=True, height=min(300, 40 + len(profit_df) * 35), hide_index=True)
+                    else:
+                        st.caption("**Score Profit V2** = ROAS (40%) + CPA inversé (25%) + CVR (15%) + Panier moyen (20%)")
+                        cpa_q25, cpa_q50, cpa_q75 = filtered_df[filtered_df['cpa_calc'] > 0]['cpa_calc'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cpa_calc'] > 0]) > 0 else (10, 20, 40)
+                        cvr_q25, cvr_q50, cvr_q75 = filtered_df[filtered_df['cvr'] > 0]['cvr'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cvr'] > 0]) > 0 else (1, 2, 5)
+                        panier_q25, panier_q50, panier_q75 = filtered_df[filtered_df['panier_moyen'] > 0]['panier_moyen'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['panier_moyen'] > 0]) > 0 else (20, 40, 80)
+                        
+                        profit_df = filtered_df[['nom', 'format', 'roas', 'cpa_calc', 'cvr', 'panier_moyen', 'profit_estime', 'is_profitable', 'achats', 'score_profitabilite']].copy()
+                        profit_df['ROAS'] = profit_df['roas'].apply(lambda x: format_metric_color(x, (roas_q25, roas_q50, roas_q75), inverse=False, decimals=2))
+                        profit_df['CPA'] = profit_df['cpa_calc'].apply(lambda x: format_metric_color(x, (cpa_q25, cpa_q50, cpa_q75), inverse=True, suffix="€", decimals=2))
+                        profit_df['CVR'] = profit_df['cvr'].apply(lambda x: format_metric_color(x, (cvr_q25, cvr_q50, cvr_q75), inverse=False, suffix="%", decimals=2))
+                        profit_df['Panier'] = profit_df['panier_moyen'].apply(lambda x: format_metric_color(x, (panier_q25, panier_q50, panier_q75), inverse=False, suffix="€", decimals=0))
+                        profit_df['Profit €'] = profit_df.apply(lambda r: f"{'✅' if r['is_profitable'] else '❌'} {r['profit_estime']:+,.0f}€", axis=1)
+                        profit_df['Score'] = profit_df['score_profitabilite'].apply(format_score_color)
+                        st.dataframe(profit_df[['format', 'nom', 'ROAS', 'CPA', 'CVR', 'Panier', 'Profit €', 'achats', 'Score']], use_container_width=True, height=min(300, 40 + len(profit_df) * 35), hide_index=True)
                 
                 with tab_trafic:
                     st.caption("**Score Trafic** = CTR (50%) + CPC inversé (30%) + Clics (20%)")
                     cpc_q25, cpc_q50, cpc_q75 = filtered_df[filtered_df['cpc_lien'] > 0]['cpc_lien'].quantile([0.25, 0.5, 0.75]) if len(filtered_df[filtered_df['cpc_lien'] > 0]) > 0 else (0.2, 0.5, 1)
                     clics_q25, clics_q50, clics_q75 = filtered_df['clics_lien'].quantile([0.25, 0.5, 0.75])
                     
-                    trafic_cols = ['nom', 'format', 'ctr_lien', 'cpc_lien', 'clics_lien', 'impressions', 'score_trafic']
-                    if has_thumbnails:
-                        trafic_cols.insert(0, 'thumbnail_url')
-                    trafic_df = filtered_df[trafic_cols].copy()
+                    trafic_df = filtered_df[['nom', 'format', 'ctr_lien', 'cpc_lien', 'clics_lien', 'impressions', 'score_trafic']].copy()
                     trafic_df['CTR'] = trafic_df['ctr_lien'].apply(lambda x: format_metric_color(x, (ctr_q25, ctr_q50, ctr_q75), inverse=False, suffix="%", decimals=2))
                     trafic_df['CPC'] = trafic_df['cpc_lien'].apply(lambda x: format_metric_color(x, (cpc_q25, cpc_q50, cpc_q75), inverse=True, suffix="€", decimals=2))
                     trafic_df['Clics'] = trafic_df['clics_lien'].apply(lambda x: format_metric_color(x, (clics_q25, clics_q50, clics_q75), inverse=False, decimals=0))
-                    # Barre native + emoji
-                    trafic_df['Score'] = trafic_df['score_trafic']
-                    trafic_df['Lvl'] = trafic_df['score_trafic'].apply(lambda x: "🟢" if x >= 70 else "🟡" if x >= 55 else "🟠" if x >= 40 else "🔴" if x > 0 else "⚪")
-                    
-                    display_cols = ['format', 'nom', 'CTR', 'CPC', 'Clics', 'Score', 'Lvl']
-                    col_config = {
-                        'Score': st.column_config.ProgressColumn("Score", format="%d", min_value=0, max_value=100, width=100),
-                        'Lvl': st.column_config.TextColumn("", width=35)
-                    }
-                    if has_thumbnails:
-                        trafic_df.rename(columns={'thumbnail_url': 'Thumb'}, inplace=True)
-                        display_cols.insert(0, 'Thumb')
-                        col_config['Thumb'] = st.column_config.ImageColumn("🖼️", width=50)
-                    st.dataframe(trafic_df[display_cols], use_container_width=True, height=min(300, 40 + len(trafic_df) * 35), hide_index=True, column_config=col_config)
+                    trafic_df['Score'] = trafic_df['score_trafic'].apply(format_score_color)
+                    st.dataframe(trafic_df[['format', 'nom', 'CTR', 'CPC', 'Clics', 'Score']], use_container_width=True, height=min(300, 40 + len(trafic_df) * 35), hide_index=True)
                 
                 with tab_notoriete:
                     st.caption("**Score Notoriété** = CPMu inversé (50%) + Couverture (50%)")
-                    notoriete_cols = ['nom', 'format', 'cpmu', 'cpm', 'reach', 'frequency', 'score_notoriete']
-                    if has_thumbnails:
-                        notoriete_cols.insert(0, 'thumbnail_url')
-                    notoriete_df = filtered_df[notoriete_cols].copy()
+                    notoriete_df = filtered_df[['nom', 'format', 'cpmu', 'cpm', 'reach', 'frequency', 'score_notoriete']].copy()
                     notoriete_df['CPMu'] = notoriete_df['cpmu'].apply(lambda x: format_metric_color(x, (cpmu_q25, cpmu_q50, cpmu_q75), inverse=True, suffix="€", decimals=2))
                     notoriete_df['CPM'] = notoriete_df['cpm'].apply(lambda x: format_metric_color(x, (cpm_q25, cpm_q50, cpm_q75), inverse=True, suffix="€", decimals=2))
                     notoriete_df['Reach'] = notoriete_df['reach'].apply(lambda x: format_metric_color(x, (reach_q25, reach_q50, reach_q75), inverse=False, decimals=0))
-                    # Barre native + emoji
-                    notoriete_df['Score'] = notoriete_df['score_notoriete']
-                    notoriete_df['Lvl'] = notoriete_df['score_notoriete'].apply(lambda x: "🟢" if x >= 70 else "🟡" if x >= 55 else "🟠" if x >= 40 else "🔴" if x > 0 else "⚪")
-                    
-                    display_cols = ['format', 'nom', 'CPMu', 'CPM', 'Reach', 'Score', 'Lvl']
-                    col_config = {
-                        'Score': st.column_config.ProgressColumn("Score", format="%d", min_value=0, max_value=100, width=100),
-                        'Lvl': st.column_config.TextColumn("", width=35)
-                    }
-                    if has_thumbnails:
-                        notoriete_df.rename(columns={'thumbnail_url': 'Thumb'}, inplace=True)
-                        display_cols.insert(0, 'Thumb')
-                        col_config['Thumb'] = st.column_config.ImageColumn("🖼️", width=50)
-                    st.dataframe(notoriete_df[display_cols], use_container_width=True, height=min(300, 40 + len(notoriete_df) * 35), hide_index=True, column_config=col_config)
+                    notoriete_df['Score'] = notoriete_df['score_notoriete'].apply(format_score_color)
+                    st.dataframe(notoriete_df[['format', 'nom', 'CPMu', 'CPM', 'Reach', 'Score']], use_container_width=True, height=min(300, 40 + len(notoriete_df) * 35), hide_index=True)
                 
                 with tab_tendance:
                     if has_daily:
@@ -3442,42 +2993,19 @@ def main():
                                 color = "🟢" if value >= 5 else "⚪" if value >= -5 else "🟠" if value >= -20 else "🔴"
                             return f"{color} {value:+.0f}%"
                         
-                        def format_trend_score_bar(score):
-                            """Score tendance avec barre visuelle."""
-                            if pd.isna(score):
-                                return "➖ 0"
-                            
-                            # Déterminer la couleur et le label
+                        def format_trend_score(score):
                             if score >= 15:
-                                emoji = "🟢"
-                                label = "Excellent"
+                                return f"🟢 {score:+.0f} (Excellent)"
                             elif score >= 5:
-                                emoji = "🟢"
-                                label = "Bon"
+                                return f"🟢 {score:+.0f} (Bon)"
                             elif score >= -5:
-                                emoji = "⚪"
-                                label = "Stable"
+                                return f"⚪ {score:+.0f} (Stable)"
                             elif score >= -15:
-                                emoji = "🟠"
-                                label = "Baisse"
+                                return f"🟠 {score:+.0f} (Baisse)"
                             else:
-                                emoji = "🔴"
-                                label = "Chute"
-                            
-                            # Barre centrée sur 0 (échelle -50 à +50)
-                            normalized = max(-50, min(50, score))
-                            if normalized >= 0:
-                                bar = "░" * 5 + "█" * int(normalized / 10) + "░" * (5 - int(normalized / 10))
-                            else:
-                                filled = int(abs(normalized) / 10)
-                                bar = "░" * (5 - filled) + "█" * filled + "░" * 5
-                            
-                            return f"{emoji} {score:+.0f} ({label})"
+                                return f"🔴 {score:+.0f} (Chute)"
                         
-                        tendance_cols = ['nom', 'format', 'trend_ctr', 'trend_cpm', 'trend_score']
-                        if has_thumbnails:
-                            tendance_cols.insert(0, 'thumbnail_url')
-                        tendance_df = filtered_df[tendance_cols].copy()
+                        tendance_df = filtered_df[['nom', 'format', 'trend_ctr', 'trend_cpm', 'trend_score']].copy()
                         tendance_df['trend_cpc'] = tendance_df['nom'].apply(lambda x: trends.get(x, {}).get('cpc', 0))
                         tendance_df['trend_impr'] = tendance_df['nom'].apply(lambda x: trends.get(x, {}).get('impressions', 0))
                         
@@ -3485,19 +3013,12 @@ def main():
                         tendance_df['Δ CPC'] = tendance_df['trend_cpc'].apply(lambda x: format_trend_metric(x, inverse=True))
                         tendance_df['Δ CPM'] = tendance_df['trend_cpm'].apply(lambda x: format_trend_metric(x, inverse=True))
                         tendance_df['Δ Impr.'] = tendance_df['trend_impr'].apply(lambda x: format_trend_metric(x, inverse=False))
-                        tendance_df['Score'] = tendance_df['trend_score'].apply(format_trend_score_bar)
+                        tendance_df['Score'] = tendance_df['trend_score'].apply(format_trend_score)
                         
                         tendance_df = tendance_df.sort_values('trend_score', ascending=False)
-                        
-                        display_cols = ['format', 'nom', 'Δ CTR', 'Δ CPC', 'Δ CPM', 'Δ Impr.', 'Score']
-                        col_config = {'Score': st.column_config.TextColumn("Score", width=130)}
-                        if has_thumbnails:
-                            tendance_df.rename(columns={'thumbnail_url': 'Thumb'}, inplace=True)
-                            display_cols.insert(0, 'Thumb')
-                            col_config['Thumb'] = st.column_config.ImageColumn("🖼️", width=50)
-                        st.dataframe(tendance_df[display_cols], use_container_width=True, height=min(300, 40 + len(tendance_df) * 35), hide_index=True, column_config=col_config)
+                        st.dataframe(tendance_df[['format', 'nom', 'Δ CTR', 'Δ CPC', 'Δ CPM', 'Δ Impr.', 'Score']], use_container_width=True, height=min(300, 40 + len(tendance_df) * 35), hide_index=True)
                     else:
-                        st.info("📊 **Données quotidiennes requises** pour calculer les tendances.\n\nPour activer cette fonctionnalité :\n1. Exportez vos données Meta Ads avec la **ventilation par jour**\n2. Chargez ce fichier dans le champ **'Données quotidiennes'** de la sidebar")
+                        st.info("⚠️ Chargez les données quotidiennes pour voir les tendances.")
         
         # ===== DÉTAIL CRÉATIVE (COMPACT) =====
         if filtered_creatives > 0:
@@ -3525,12 +3046,21 @@ def main():
                         st.caption(f"CPMu: {row['cpmu']:.2f}€")
                     
                     with col2:
-                        st.markdown("**💰 Conversions**")
-                        st.caption(f"Achats: {row['achats']:.0f}")
-                        st.caption(f"ROAS: {row['roas']:.2f}")
-                        st.caption(f"Dépense: {row['depense']:.2f}€")
-                        st.caption(f"Frequency: {row['frequency']:.2f}")
-                        st.caption(f"Confiance: {row['coefficient_confiance']*100:.0f}%")
+                        if is_leadgen:
+                            st.markdown("**📋 Conversions (Lead Gen)**")
+                            st.caption(f"Leads: {row['leads']:.0f}")
+                            st.caption(f"CPL: {row['cpl']:.2f}€")
+                            st.caption(f"CVR LP: {row['cvr_lp']:.2f}%")
+                            st.caption(f"Dépense: {row['depense']:.2f}€")
+                            st.caption(f"Frequency: {row['frequency']:.2f}")
+                            st.caption(f"Confiance: {row['coefficient_confiance']*100:.0f}%")
+                        else:
+                            st.markdown("**💰 Conversions**")
+                            st.caption(f"Achats: {row['achats']:.0f}")
+                            st.caption(f"ROAS: {row['roas']:.2f}")
+                            st.caption(f"Dépense: {row['depense']:.2f}€")
+                            st.caption(f"Frequency: {row['frequency']:.2f}")
+                            st.caption(f"Confiance: {row['coefficient_confiance']*100:.0f}%")
                     
                     with col3:
                         st.markdown("**🎯 Scores**")
@@ -3582,31 +3112,6 @@ def main():
         
         if len(selected) >= 2:
             compare_df = df[df['nom'].isin(selected)]
-            
-            # Afficher les thumbnails des créatives sélectionnées
-            if has_thumbnails:
-                st.subheader("🖼️ Créatives sélectionnées")
-                thumb_cols = st.columns(len(selected))
-                for i, nom in enumerate(selected):
-                    row = compare_df[compare_df['nom'] == nom].iloc[0]
-                    with thumb_cols[i]:
-                        thumb_url = row.get('thumbnail_url') if pd.notna(row.get('thumbnail_url')) else None
-                        if thumb_url:
-                            st.markdown(f'''
-                            <div style="text-align:center;">
-                                <img src="{thumb_url}" style="width:100px; height:100px; object-fit:cover; border-radius:12px; border:2px solid {COLORS['border']}; margin-bottom:8px;" onerror="this.style.display='none'"/>
-                                <div style="font-size:0.75rem; color:{COLORS['text_secondary']};">{row['format']}</div>
-                                <div style="font-size:0.7rem; color:{COLORS['text_muted']}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:120px; margin:0 auto;">{nom[:20]}...</div>
-                            </div>
-                            ''', unsafe_allow_html=True)
-                        else:
-                            st.markdown(f'''
-                            <div style="text-align:center;">
-                                <div style="width:100px; height:100px; background:{COLORS['bg_tertiary']}; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:40px; margin:0 auto 8px auto; border:2px solid {COLORS['border']};">🖼️</div>
-                                <div style="font-size:0.75rem; color:{COLORS['text_secondary']};">{row['format']}</div>
-                                <div style="font-size:0.7rem; color:{COLORS['text_muted']}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:120px; margin:0 auto;">{nom[:20]}...</div>
-                            </div>
-                            ''', unsafe_allow_html=True)
             
             if has_daily:
                 st.subheader("📈 Évolution CTR")
